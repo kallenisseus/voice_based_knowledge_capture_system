@@ -1,0 +1,410 @@
+/* =========================================================
+   BASE
+   ========================================================= */
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+:root{
+  --bg: #f5f5f5;
+  --panel: #fff;
+  --border: #ddd;
+  --muted: #666;
+  --muted2: #888;
+
+  --shadow: 0 2px 4px rgba(0,0,0,0.1);
+
+  --blue: #2196f3;
+  --blueBg: #f0f7ff;
+  --grayBg1: #f0f0f0;
+  --grayBg2: #f8f8f8;
+  --grayBg3: #f3f3f3;
+
+  --radius: 8px;
+}
+
+body{
+  font-family: Arial, sans-serif;
+  background: var(--bg);
+  padding: 20px;
+  color: #222;
+}
+
+/* =========================================================
+   LAYOUT
+   ========================================================= */
+
+.container{
+  display: grid;
+  grid-template-columns: 250px 1fr 420px;
+  gap: 20px;
+  max-width: 1600px;
+  margin: 0 auto;
+  height: calc(100vh - 40px);
+}
+
+.input-panel,
+.output-panel,
+.text-panel{
+  background: var(--panel);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 20px;
+}
+
+/* Make middle + right scroll nicely */
+.output-panel,
+.text-panel{
+  overflow-y: auto;
+}
+
+/* =========================================================
+   LEFT PANEL
+   ========================================================= */
+
+.input-panel{
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.input-panel h2{
+  font-size: 18px;
+  margin-bottom: 6px;
+}
+
+.form-group{
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.form-group label{
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.form-group input{
+  padding: 9px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 14px;
+}
+
+.submit-btn,
+.reload-btn{
+  padding: 10px;
+  border: 0;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.submit-btn{ background: #4caf50; color: #fff; }
+.submit-btn:hover{ filter: brightness(0.95); }
+
+.processing-status{
+  display: none;
+  padding: 10px;
+  background: #e8f5e9;
+  border-radius: 6px;
+  font-weight: 700;
+  color: #2e7d32;
+}
+
+.reload-btn{
+  margin-top: auto;
+  background: var(--blue);
+  color: #fff;
+}
+.reload-btn:hover{ filter: brightness(0.95); }
+
+/* =========================================================
+   MIDDLE PANEL (TREE)
+   ========================================================= */
+
+.search-bar{
+  width: 100%;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  margin-bottom: 16px;
+}
+
+.category{ margin-bottom: 14px; }
+
+.category-header,
+.subcategory-header,
+.snippets-header{
+  user-select: none;
+  cursor: pointer;
+  border-radius: 6px;
+  padding: 8px 10px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* arrow */
+.category-header::before,
+.subcategory-header::before,
+.snippets-header::before{
+  content: "▾";
+  display: inline-block;
+  transition: transform 0.15s ease;
+}
+
+/* rotate arrow when collapsed */
+.category-header.collapsed::before,
+.subcategory-header.collapsed::before,
+.snippets-header.collapsed::before{
+  transform: rotate(-90deg);
+}
+
+.category-header{
+  background: var(--grayBg1);
+  font-size: 15px;
+}
+
+.subcategory{ margin-left: 14px; margin-top: 8px; }
+.subcategory-header{
+  background: var(--grayBg2);
+  font-size: 13px;
+}
+
+/* Make these more specific to override the old style */
+.subcategory-content .summary-text {
+  margin: 0; /* Reset the old margin */
+  padding: 0; /* Reset the old padding */
+  border: none; /* Remove the old border */
+  border-radius: 0;
+  font-size: inherit; /* Inherit from parent */
+  color: inherit;
+  font-style: normal; /* Remove italic */
+}
+
+.subcategory-content .summary-header {
+  display: flex !important;
+  align-items: center !important;
+  gap: 5px !important;
+  padding: 8px 13px !important;
+  margin-bottom: 1px !important;
+  border-radius: 4px !important;
+  font-weight: bold !important;
+}
+
+.subcategory-content .summary-header .icon {
+  color: #dc3545;
+  font-weight: bold;
+  font-size: 1.2em;
+}
+
+.subcategory-content .summary-content {
+  padding: 5px;
+  border-radius: 4px;
+  
+}
+
+
+.snippets{ margin-left: 14px; margin-top: 8px; }
+.snippets-header{
+  background: var(--grayBg3);
+  font-size: 12.5px;
+}
+
+.snippets-content{ display: none; margin-top: 8px; }
+
+/* =========================================================
+   SNIPPET ITEM
+   ========================================================= */
+
+.snippet-item{
+  padding: 10px;
+  background: #fafafa;
+  border-left: 3px solid #999;
+  border-radius: 6px;
+  margin-bottom: 8px;
+  cursor: pointer;
+  transition: transform 0.06s ease, box-shadow 0.06s ease;
+}
+
+.snippet-item:hover{
+  box-shadow: 0 2px 10px rgba(0,0,0,0.08);
+  transform: translateY(-1px);
+}
+
+.snippet-item.selected{
+  border-left-color: var(--blue);
+  background: var(--blueBg);
+}
+
+.snippet-meta{
+  font-size: 12px;
+  color: var(--muted2);
+  margin-bottom: 6px;
+}
+
+.snippet-text{
+  font-size: 13px;
+  color: #333;
+  margin-bottom: 6px;
+}
+
+/* Links area */
+.snippet-links{
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.snippet-links .path{
+  font-size: 11px;
+  color: var(--muted2);
+  font-family: monospace;
+}
+
+/* clickable audio link */
+.audio-link{
+  font-size: 12px;
+  font-weight: 700;
+  text-decoration: none;
+  color: var(--blue);
+  width: fit-content;
+}
+.audio-link:hover{
+  text-decoration: underline;
+}
+
+/* time badge near snippet */
+.time-badge{
+  font-size: 11px;
+  color: #333;
+  background: #eee;
+  width: fit-content;
+  padding: 2px 8px;
+  border-radius: 999px;
+}
+
+/* =========================================================
+   RIGHT PANEL (ABOUT + AUDIO + TRANSCRIPT)
+   ========================================================= */
+
+.text-panel h2{
+  font-size: 18px;
+  margin-bottom: 12px;
+  padding-bottom: 10px;
+  border-bottom: 2px solid var(--border);
+}
+
+.about-section{ margin-bottom: 14px; }
+
+.about-label{
+  font-weight: 700;
+  font-size: 12px;
+  color: var(--muted2);
+  margin-bottom: 6px;
+}
+
+.about-content{ font-size: 14px; }
+
+.audio-player{
+  margin-bottom: 14px;
+  padding: 10px;
+  border: 1px solid #eee;
+  border-radius: 8px;
+}
+
+.audio-time{
+  font-size: 12px;
+  color: var(--muted2);
+  margin-top: 6px;
+}
+
+/* Transcript container */
+.transcript-content{
+  font-size: 14px;
+  color: #333;
+}
+/* Make transcript scrollable, keep rest fixed */
+.transcript-scroll-container {
+  height: 400px; /* Fixed height */
+  overflow-y: auto; /* Makes it scrollable */
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  margin-top: 20px;
+  background: white;
+}
+
+/* Optional: Style the transcript content inside */
+.transcript-content {
+  padding: 15px;
+}
+
+/* When transcript has content, remove the placeholder style */
+.transcript-content:not(:empty) p:first-child {
+  display: none;
+}
+
+/* Segment rows (timestamped transcript) */
+.segment{
+  padding: 10px;
+  border: 1px solid #eee;
+  border-radius: 10px;
+  margin: 8px 0;
+  cursor: pointer;
+  background: #fff;
+}
+
+.segment:hover{
+  box-shadow: 0 2px 10px rgba(0,0,0,0.06);
+}
+
+.segment.active{
+  outline: 2px solid var(--blue);
+  background: #f8fbff;
+}
+
+.seg-time{
+  font-weight: 700;
+  color: #444;
+  margin-right: 8px;
+  white-space: nowrap;
+}
+
+.seg-text{
+  color: #333;
+}
+
+/* Highlight inside segment */
+mark.hl{
+  padding: 1px 4px;
+  border-radius: 4px;
+  font-weight: 800;
+}
+
+/* =========================================================
+   SMALL TEXT / HINTS
+   ========================================================= */
+
+.hint-text{
+  color: var(--muted2);
+  font-size: 13px;
+  margin-top: 14px;
+  font-style: italic;
+}
+
+/* =========================================================
+   RESPONSIVE
+   ========================================================= */
+
+@media (max-width: 1200px){
+  body{ padding: 14px; }
+  .container{
+    grid-template-columns: 1fr;
+    height: auto;
+  }
+  .input-panel, .output-panel, .text-panel{
+    min-height: 260px;
+  }
+}

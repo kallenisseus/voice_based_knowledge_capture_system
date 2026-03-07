@@ -1,0 +1,47 @@
+# --------------------
+# Python
+# --------------------
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.log
+
+# --------------------
+# Virtual environment
+# --------------------
+venv/
+.venv/
+env/
+ENV/
+
+# --------------------
+# Django
+# --------------------
+*.sqlite3
+db.sqlite3
+local_settings.py
+.env
+
+# --------------------
+# IDEs / Editors
+# --------------------
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# --------------------
+# OS files
+# --------------------
+.DS_Store
+Thumbs.db
+
+# --------------------
+# Jupyter / ML
+# --------------------
+.ipynb_checkpoints/
+models/
+checkpoints/
+data/audio/
+media/

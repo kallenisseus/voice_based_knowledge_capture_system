@@ -1,0 +1,8 @@
+openai
+scikit-learn
+dotenv
+matplotlib
+umap-learn
+seaborn
+openai-whisper
+django

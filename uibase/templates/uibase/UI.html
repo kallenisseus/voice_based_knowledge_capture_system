@@ -1,0 +1,450 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <!-- ======================================================
+       HEAD / STYLES
+       ====================================================== -->
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Knowledge Base</title>
+
+  <!-- Static CSS (Django) -->
+  <link rel="stylesheet" href="{% static 'uibase/css/UI.css' %}">
+</head>
+
+<body>
+  <!-- ======================================================
+       MAIN 3-COLUMN LAYOUT
+       ====================================================== -->
+  <div class="container">
+
+    <!-- ======================================================
+        LEFT PANEL — INPUT (upload, category, author)
+        Now submits to backend via POST
+        ====================================================== -->
+    <div class="input-panel">
+      <h2>Input Audiofile</h2>
+
+      {% if post_success is not None %}
+        {% if post_success %}
+          <div class="processing-status" style="display:block">Upload successful: {{ saved_file }}</div>
+        {% else %}
+          <div class="processing-status" style="display:block">{{ error }}</div>
+        {% endif %}
+      {% endif %}
+
+      <form method="post" action="{% url 'returnindex' %}" enctype="multipart/form-data">
+        {% csrf_token %}
+        <div class="form-group">
+          <label for="audioFile">Upload Audio</label>
+          <input type="file" id="audioFile" name="audio_file" accept="audio/*" />
+        </div>
+
+        <div class="form-group">
+          <label for="category">Category</label>
+          <input type="text" id="category" name="category" placeholder="Enter machine/category" value="{{ category_submitted|default:'' }}" />
+        </div>
+
+        <div class="form-group">
+          <label for="authorName">Your Name</label>
+          <input type="text" id="authorName" name="author_name" placeholder="Enter your name" value="{{ author_submitted|default:'' }}" />
+        </div>
+
+        <button class="submit-btn" type="submit">Submit</button>
+      </form>
+    </div>
+
+
+    <!-- ======================================================
+         MIDDLE PANEL — OUTPUT TREE
+         Structure:
+           Category (collapsible)
+             Subcategory (collapsible, default CLOSED)
+               Summary
+               Snippets (collapsible, default CLOSED)
+                 Snippet items (click => show transcript on right panel)
+         ====================================================== -->
+    <div class="output-panel">
+      <input type="text" class="search-bar" placeholder="Search..." />
+
+      {% for category_name, subcats in kb.items %}
+        <div class="category">
+
+          <!-- Category header (click toggles entire category-content) -->
+          <div class="category-header">
+            {{ category_name }}
+          </div>
+
+          <!-- Category content -->
+          <div class="category-content"  style="display: none">
+            {% for subcat_name, subcat_obj in subcats.items %}
+
+
+              <div class="subcategory">
+                <!-- Subcategory header (default collapsed) -->
+                <div class="subcategory-header">
+                  {{ subcat_name }}
+                </div>
+
+                <!-- NEW: Wrap both summary and snippets in one container -->
+                <div class="subcategory-content" style="display: none">
+                  
+                  <!-- Summary -->
+                  {% if subcat_obj.summary %}
+                    <div class="summary-text">
+                      <div class="summary-header">
+                        <span>Attention: This is an AI Summary</span>
+                        <span class="icon">!</span>
+                      </div>
+                      <div class="summary-content">
+                        {{ subcat_obj.summary }}
+                      </div>
+                    </div>
+                  {% endif %}
+
+                  <!-- Snippets -->
+                  {% if subcat_obj.windows %}
+                    <div class="snippets">
+                      <div class="snippets-header">
+                        Snippets ({{ subcat_obj.windows|length }})
+                      </div>
+                      <div class="snippets-content" style="display: none">
+                        {% for w in subcat_obj.windows %}
+                          <!-- Each snippet stores enough info for JS to load transcript + highlight -->
+                          <div class="snippet-item"
+                              data-category="{{ category_name|escapejs }}"
+                              data-file="{{ w.source_file|escapejs }}"
+                              data-snippet="{{ w.text|escapejs }}">
+
+                            <div class="snippet-meta">
+                              {{ w.source_file }} • {{ w.author }} • {{ w.date }}
+                            </div>
+
+                            <div class="snippet-text">{{ w.text }}</div>
+
+                            <!-- Placeholder "paths" – these are not real URLs yet -->
+                            <div class="snippet-links">
+                              <span </span>
+                                <a href="#"
+                                  class="audio-link"
+                                  data-category="{{ category_name|escapejs }}"
+                                  data-file="{{ w.source_file|escapejs }}">
+                                  ▶ Audio: {{ w.source_file }}
+                                </a>
+
+                                {% if w.start is not None and w.end is not None %}
+                                  <span class="time-badge">
+                                    {{ w.start|floatformat:1 }}s – {{ w.end|floatformat:1 }}s
+                                  </span>
+                                {% endif %}
+
+                            </div>
+                          </div>
+                        {% endfor %}
+                      </div>
+                    </div>
+                  {% endif %}
+
+                </div>
+              </div>
+            {% endfor %}
+          </div>
+        </div>
+      {% endfor %}
+
+      <p class="hint-text">Text segments from file</p>
+    </div>
+
+
+    <!-- ======================================================
+         RIGHT PANEL — TRANSCRIPT VIEWER
+         Shows transcript for clicked snippet + highlights snippet text.
+         ====================================================== -->
+<div class="text-panel" style="height: 100vh; display: flex; flex-direction: column;">
+  <h2>About</h2>
+
+  <div class="about-section">
+    <div class="about-label"></div>
+    <div class="about-content" id="aboutContent">
+      Click a snippet to load transcript
+    </div>
+  </div>
+
+  <div class="audio-player">
+    <div class="about-label">Audio</div>
+    <audio id="audioPlayer" controls preload="metadata" style="width: 100%;">
+      Your browser does not support the audio element.
+    </audio>
+    <div class="audio-time" id="audioTime"></div>
+  </div>
+
+  <!-- Transcript takes remaining space and scrolls internally -->
+  <div class="transcript-scroll-container" style="flex: 1; overflow-y: auto; border: 1px solid #ddd; margin-top: 15px;">
+    <div class="transcript-content" id="transcriptContent">
+      <p>Full transcript will appear here…</p>
+    </div>
+  </div>
+</div>
+
+
+  <!-- ======================================================
+       EMBED METADATA JSON INTO PAGE (SAFE)
+       This allows JS to look up full transcript text by:
+         META[category_name][source_file].transcription.text
+       ====================================================== -->
+  {{ meta|json_script:"kb-meta" }}
+
+
+<script>
+  // =============================
+  // LEFT PANEL HELPERS (UI only)
+  // =============================
+  document.getElementById('audioFile').addEventListener('change', function (e) {
+    const fileName = e.target.files[0]?.name || '';
+    document.getElementById('audioFileName').value = fileName;
+  });
+
+  document.querySelector('.submit-btn').addEventListener('click', function () {
+    const status = document.getElementById('processingStatus');
+    status.style.display = 'block';
+    status.textContent = 'Processing...';
+    setTimeout(() => {
+      status.textContent = 'Processing... DONE!';
+    }, 2000);
+  });
+
+  // =============================
+  // COLLAPSIBLE HELPERS
+  // =============================
+  function bindCollapsible(selector, contentClass) {
+    document.querySelectorAll(selector).forEach(header => {
+      header.addEventListener('click', function () {
+        this.classList.toggle('collapsed');
+        const content = this.nextElementSibling;
+
+        if (content && (!contentClass || content.classList.contains(contentClass))) {
+          content.style.display = (content.style.display === 'none') ? 'block' : 'none';
+        }
+      });
+    });
+  }
+
+  bindCollapsible('.category-header', 'category-content');
+  bindCollapsible('.subcategory-header', 'subcategory-content');
+  bindCollapsible('.snippets-header', 'snippets-content');
+
+  // =============================
+  // METADATA
+  // =============================
+  const META = JSON.parse(document.getElementById("kb-meta").textContent);
+
+  function escapeHtml(str) {
+    return (str || "")
+      .replaceAll("&", "&amp;")
+      .replaceAll("<", "&lt;")
+      .replaceAll(">", "&gt;")
+      .replaceAll('"', "&quot;")
+      .replaceAll("'", "&#039;");
+  }
+
+  function normalizeForSearch(s) {
+    return (s || "").replace(/\s+/g, " ").trim().toLowerCase();
+  }
+
+  // =============================
+  // AUDIO HELPERS
+  // =============================
+  function formatTime(sec) {
+    if (sec == null || isNaN(sec)) return "";
+    const s = Math.max(0, sec);
+    const m = Math.floor(s / 60);
+    const r = (s % 60).toFixed(1).padStart(4, "0");
+    return `${m}:${r}`; // 1:05.3
+  }
+
+  async function setAudioSource(file) {
+    const src = `data/audio/${encodeURIComponent(file)}`; // your current path
+    const audio = document.getElementById("audioPlayer");
+    if (!audio) return;
+
+    if (audio.dataset.currentSrc === src) return;
+    audio.dataset.currentSrc = src;
+
+    await loadAudioAsBlob(src);
+  }
+
+
+  function seekAudio(seconds) {
+    const audio = document.getElementById("audioPlayer");
+    if (!audio || seconds == null || isNaN(seconds)) return;
+
+    if (audio.readyState < 1) {
+      audio.addEventListener("loadedmetadata", () => {
+        audio.currentTime = Math.max(0, seconds);
+        audio.play().catch(() => {});
+      }, { once: true });
+    } else {
+      audio.currentTime = Math.max(0, seconds);
+      audio.play().catch(() => {});
+    }
+  }
+
+  const AUDIO_BLOB_CACHE = new Map();
+
+  async function loadAudioAsBlob(src) {
+    const audio = document.getElementById("audioPlayer");
+    if (!audio) return;
+
+    // reuse cached blob url for same file
+    if (AUDIO_BLOB_CACHE.has(src)) {
+      audio.src = AUDIO_BLOB_CACHE.get(src);
+      return;
+    }
+
+    const res = await fetch(src);
+    if (!res.ok) throw new Error(`Failed to fetch audio: ${res.status}`);
+
+    const blob = await res.blob();
+    const blobUrl = URL.createObjectURL(blob);
+
+    AUDIO_BLOB_CACHE.set(src, blobUrl);
+    audio.src = blobUrl;
+  }
+
+
+  // =============================
+  // TRANSCRIPT RENDERING
+  // =============================
+  function renderTranscriptSegments(segments, activeIndex, snippetText) {
+    const container = document.getElementById("transcriptContent");
+    if (!container) return;
+
+    if (!Array.isArray(segments) || segments.length === 0) {
+      container.innerHTML = `<p class="hint-text">No segments found.</p>`;
+      return;
+    }
+
+    const snNorm = normalizeForSearch(snippetText);
+
+    container.innerHTML = segments.map((seg, i) => {
+      const start = seg.start ?? null;
+      const end = seg.end ?? null;
+
+      // OPTIONAL: highlight snippet text *inside* the active segment
+      let segText = seg.text || "";
+      if (i === activeIndex && snippetText) {
+        const idx = segText.toLowerCase().indexOf((snippetText || "").toLowerCase());
+        if (idx !== -1) {
+          const before = escapeHtml(segText.slice(0, idx));
+          const match = escapeHtml(segText.slice(idx, idx + snippetText.length));
+          const after = escapeHtml(segText.slice(idx + snippetText.length));
+          segText = `${before}<mark class="hl">${match}</mark>${after}`;
+        } else {
+          // fallback: just escape
+          segText = escapeHtml(segText);
+        }
+      } else {
+        segText = escapeHtml(segText);
+      }
+
+      const cls = (i === activeIndex) ? "segment active" : "segment";
+
+      return `
+        <div class="${cls}" data-start="${start}">
+          <span class="seg-time">[${formatTime(start)} – ${formatTime(end)}]</span>
+          <span class="seg-text">${segText}</span>
+        </div>
+      `;
+    }).join("");
+
+    // click transcript segment => seek audio
+    container.querySelectorAll(".segment").forEach(segEl => {
+      segEl.addEventListener("click", () => {
+        const start = parseFloat(segEl.dataset.start);
+        if (!isNaN(start)) seekAudio(start);
+      });
+    });
+
+    const active = container.querySelector(".segment.active");
+    if (active) active.scrollIntoView({ behavior: "smooth", block: "center" });
+  }
+
+  function findBestSegmentIndex(segments, snippetText) {
+    if (!Array.isArray(segments) || !snippetText) return -1;
+    const sn = normalizeForSearch(snippetText);
+    if (!sn) return -1;
+
+    for (let i = 0; i < segments.length; i++) {
+      const st = normalizeForSearch(segments[i]?.text || "");
+      if (st.includes(sn) || sn.includes(st)) return i;
+    }
+
+    const snShort = sn.slice(0, 40);
+    if (snShort.length > 10) {
+      for (let i = 0; i < segments.length; i++) {
+        const st = normalizeForSearch(segments[i]?.text || "");
+        if (st.includes(snShort)) return i;
+      }
+    }
+
+    return -1;
+  }
+
+  // =============================
+  // SNIPPET CLICK
+  // =============================
+  document.querySelectorAll(".snippet-item").forEach(el => {
+    el.addEventListener("click", () => {
+      document.querySelectorAll(".snippet-item.selected")
+        .forEach(x => x.classList.remove("selected"));
+      el.classList.add("selected");
+
+      const category = el.dataset.category;
+      const file = el.dataset.file;
+      const snippet = el.dataset.snippet;
+
+      const entry = META?.[category]?.[file];
+      const segments = entry?.transcription?.segments || [];
+      const activeIndex = findBestSegmentIndex(segments, snippet);
+
+      // About
+      const author = entry?.author || "";
+      const date = entry?.date || "";
+      document.getElementById("aboutContent").innerHTML =
+        `Filename: ${file}<br>
+        Author: ${author ? author : ""}<br>
+        Date: ${date ? date : ""}`;
+
+      // Audio
+      setAudioSource(file);
+      if (activeIndex !== -1) {
+        const start = segments[activeIndex]?.start;
+        seekAudio(start);
+      }
+
+      // Transcript (segment-based with timestamps)
+      renderTranscriptSegments(segments, activeIndex, snippet);
+    });
+  });
+
+  // =============================
+  // AUDIO LINK CLICK (don’t trigger snippet click)
+  // =============================
+  document.querySelectorAll(".audio-link").forEach(a => {
+    a.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation(); // important: prevents snippet click if you only want audio
+
+      const category = a.dataset.category;
+      const file = a.dataset.file;
+
+      setAudioSource(file);
+      // don't auto-seek here; just show player ready to play
+      document.getElementById("audioPlayer")?.play().catch(() => {});
+    });
+  });
+</script>
+
+</body>
+</html>
