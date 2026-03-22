@@ -3,8 +3,6 @@ from django.core.files.storage import FileSystemStorage
 from django.conf import settings
 from .utils import read_json_data
 import os
-import ai.ai_process
-
 
 def _ensure_audio_dir():
     media_root = getattr(settings, "MEDIA_ROOT", None)
@@ -50,7 +48,10 @@ def returnindex(request):
                 "author_submitted": author_name,
             })
 
-        ai.ai_process.process_file(uploaded.name, author_name, category)
+        if uploaded and not error:
+            from ai.ai_process import process_file
+
+            process_file(uploaded.name, author_name, category)
 
     # Load data for display regardless of method
     raw = read_json_data() or {}
