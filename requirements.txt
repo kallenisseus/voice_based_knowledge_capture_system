@@ -6,3 +6,5 @@ umap-learn
 seaborn
 openai-whisper
 django
+sentence-transformers
+faster-whisper

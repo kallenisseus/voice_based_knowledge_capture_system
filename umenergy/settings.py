@@ -21,7 +21,9 @@ MEDIA_URL = "/data/"
 MEDIA_ROOT = BASE_DIR / "data"
 
 
-load_dotenv()
+# In local development, prefer the project `.env` file over any stale shell
+# variables left over from previous sessions.
+load_dotenv(BASE_DIR / ".env", override=True)
 SECRET_KEY = os.getenv("SECRET_KEY")
 
 DEBUG = os.getenv("DEBUG", "False") == "True"
