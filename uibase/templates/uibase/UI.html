@@ -2,147 +2,146 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <!-- ======================================================
-       HEAD / STYLES
-       ====================================================== -->
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Knowledge Base</title>
-
-  <!-- Static CSS (Django) -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="{% static 'uibase/css/UI.css' %}">
 </head>
 
-<body>
-  <!-- ======================================================
-       MAIN 3-COLUMN LAYOUT
-       ====================================================== -->
-  <div class="container">
+<body data-open-upload-modal="{% if post_success is False %}1{% else %}0{% endif %}">
+  <div class="aurora-bg"></div>
+  <header class="topbar glass">
+    <div class="topbar-left">
+      <button type="button" id="openLibraryBtn" class="ghost-btn">Open Audio Navigator</button>
+      <span class="topbar-count">Indexed files: {{ uploads|length }}</span>
+    </div>
+    <div class="topbar-brand">
+      <span class="topbar-kicker">Find, Summarize, Replay</span>
+      <h1>Voice Knowledge Navigator</h1>
+    </div>
+    <div class="topbar-actions">
+      <button type="button" id="openUploadModalBtn" class="submit-btn">Add New Audio</button>
+    </div>
+  </header>
 
-    <!-- ======================================================
-        LEFT PANEL — INPUT (upload, category, author)
-        Now submits to backend via POST
-        ====================================================== -->
-    <div class="input-panel">
-      <h2>Input Audiofile</h2>
+  {% if messages or post_success is not None %}
+    <section class="notice-stack">
+      {% if messages %}
+        <div class="flash-list">
+          {% for message in messages %}
+            <div class="flash-message flash-{{ message.tags|default:'info' }}">{{ message }}</div>
+          {% endfor %}
+        </div>
+      {% endif %}
 
       {% if post_success is not None %}
         {% if post_success %}
-          <div class="processing-status" style="display:block">Upload successful: {{ saved_file }}</div>
+          <div id="processingStatus" class="processing-status" style="display:block">Upload successful: {{ saved_file }}</div>
         {% else %}
-          <div class="processing-status" style="display:block">{{ error }}</div>
+          <div id="processingStatus" class="processing-status error" style="display:block">{{ error }}</div>
         {% endif %}
       {% endif %}
+    </section>
+  {% endif %}
 
-      <form method="post" action="{% url 'returnindex' %}" enctype="multipart/form-data">
-        {% csrf_token %}
-        <div class="form-group">
-          <label for="audioFile">Upload Audio</label>
-          <input type="file" id="audioFile" name="audio_file" accept="audio/*" />
-        </div>
-
-        <div class="form-group">
-          <label for="category">Category</label>
-          <input type="text" id="category" name="category" placeholder="Enter machine/category" value="{{ category_submitted|default:'' }}" />
-        </div>
-
-        <div class="form-group">
-          <label for="authorName">Your Name</label>
-          <input type="text" id="authorName" name="author_name" placeholder="Enter your name" value="{{ author_submitted|default:'' }}" />
-        </div>
-
-        <button class="submit-btn" type="submit">Submit</button>
-      </form>
-    </div>
-
-
-    <!-- ======================================================
-         MIDDLE PANEL — OUTPUT TREE
-         Structure:
-           Category (collapsible)
-             Subcategory (collapsible, default CLOSED)
-               Summary
-               Snippets (collapsible, default CLOSED)
-                 Snippet items (click => show transcript on right panel)
-         ====================================================== -->
-    <div class="output-panel">
-      <input type="text" class="search-bar" placeholder="Search..." />
+  <div class="container">
+    <div class="output-panel glass">
+      <div class="category-browser" id="categoryBrowser">
+        {% for category_name, subcats in kb.items %}
+          <button type="button" class="category-chip" data-target="{{ category_name|escapejs }}">
+            <span class="category-chip-name">{{ category_name }}</span>
+            <span class="category-chip-count">{{ subcats|length }}</span>
+          </button>
+        {% endfor %}
+      </div>
 
       {% for category_name, subcats in kb.items %}
-        <div class="category">
+        <div class="category" data-category-name="{{ category_name|escapejs }}">
+          <div class="category-header">{{ category_name }}</div>
 
-          <!-- Category header (click toggles entire category-content) -->
-          <div class="category-header">
-            {{ category_name }}
-          </div>
-
-          <!-- Category content -->
-          <div class="category-content"  style="display: none">
+          <div class="category-content" style="display: none">
             {% for subcat_name, subcat_obj in subcats.items %}
-
-
               <div class="subcategory">
-                <!-- Subcategory header (default collapsed) -->
                 <div class="subcategory-header">
-                  {{ subcat_name }}
-                </div>
-
-                <!-- NEW: Wrap both summary and snippets in one container -->
-                <div class="subcategory-content" style="display: none">
-                  
-                  <!-- Summary -->
-                  {% if subcat_obj.summary %}
-                    <div class="summary-text">
-                      <div class="summary-header">
-                        <span>Attention: This is an AI Summary</span>
-                        <span class="icon">!</span>
-                      </div>
-                      <div class="summary-content">
-                        {{ subcat_obj.summary }}
-                      </div>
+                  <span class="subcategory-title">{{ subcat_name }}</span>
+                  {% if subcat_obj.summary or subcat_obj.summary_sections or subcat_obj.windows %}
+                    <div class="summary-toggle" role="tablist" aria-label="Summary content">
+                      <button type="button" class="summary-toggle-btn is-active" data-pane="summary">AI Summary</button>
+                      {% if subcat_obj.windows %}
+                        <button type="button" class="summary-toggle-btn" data-pane="snippets">
+                          View Snippets
+                          <span class="view-snippets-count">{{ subcat_obj.windows|length }}</span>
+                        </button>
+                      {% endif %}
                     </div>
                   {% endif %}
+                </div>
 
-                  <!-- Snippets -->
-                  {% if subcat_obj.windows %}
-                    <div class="snippets">
-                      <div class="snippets-header">
-                        Snippets ({{ subcat_obj.windows|length }})
-                      </div>
-                      <div class="snippets-content" style="display: none">
-                        {% for w in subcat_obj.windows %}
-                          <!-- Each snippet stores enough info for JS to load transcript + highlight -->
-                          <div class="snippet-item"
-                              data-category="{{ category_name|escapejs }}"
-                              data-file="{{ w.source_file|escapejs }}"
-                              data-snippet="{{ w.text|escapejs }}">
-
-                            <div class="snippet-meta">
-                              {{ w.source_file }} • {{ w.author }} • {{ w.date }}
-                            </div>
-
-                            <div class="snippet-text">{{ w.text }}</div>
-
-                            <!-- Placeholder "paths" – these are not real URLs yet -->
-                            <div class="snippet-links">
-                              <span </span>
-                                <a href="#"
-                                  class="audio-link"
-                                  data-category="{{ category_name|escapejs }}"
-                                  data-file="{{ w.source_file|escapejs }}">
-                                  ▶ Audio: {{ w.source_file }}
-                                </a>
-
-                                {% if w.start is not None and w.end is not None %}
-                                  <span class="time-badge">
-                                    {{ w.start|floatformat:1 }}s – {{ w.end|floatformat:1 }}s
-                                  </span>
-                                {% endif %}
-
-                            </div>
+                <div class="subcategory-content" style="display: none">
+                  {% if subcat_obj.summary or subcat_obj.summary_sections or subcat_obj.windows %}
+                    <div class="summary-card">
+                      <div class="summary-pane summary-pane-summary is-active">
+                        {% if subcat_obj.summary_sections %}
+                          <div class="summary-sections">
+                            {% for section in subcat_obj.summary_sections %}
+                              <article class="summary-section">
+                                <h4>{{ section.title }}</h4>
+                                <p>{{ section.body|linebreaksbr }}</p>
+                              </article>
+                            {% endfor %}
                           </div>
-                        {% endfor %}
+                        {% elif subcat_obj.summary %}
+                          <article class="summary-section">
+                            <h4>Overview</h4>
+                            <p>{{ subcat_obj.summary|linebreaksbr }}</p>
+                          </article>
+                        {% else %}
+                          <p class="hint-text">No summary available yet.</p>
+                        {% endif %}
                       </div>
+
+                      {% if subcat_obj.windows %}
+                        <div class="summary-pane summary-pane-snippets" hidden>
+                          <div class="summary-snippet-list">
+                            {% for w in subcat_obj.windows %}
+                              <div
+                                class="snippet-item"
+                                data-category="{{ category_name|escapejs }}"
+                                data-file="{{ w.source_file|escapejs }}"
+                                data-snippet="{{ w.text|escapejs }}"
+                                data-start="{{ w.start|default_if_none:'' }}"
+                                data-end="{{ w.end|default_if_none:'' }}"
+                              >
+                                <div class="snippet-meta">
+                                  {{ w.source_file }} &middot; {{ w.author }} &middot; {{ w.date }}
+                                </div>
+
+                                <div class="snippet-text">{{ w.text }}</div>
+
+                                <div class="snippet-links">
+                                  <a
+                                    href="#"
+                                    class="audio-link"
+                                    data-category="{{ category_name|escapejs }}"
+                                    data-file="{{ w.source_file|escapejs }}"
+                                  >
+                                    Play {{ w.source_file }}
+                                  </a>
+
+                                  {% if w.start is not None and w.end is not None %}
+                                    <span class="time-badge">
+                                      {{ w.start|floatformat:1 }}s - {{ w.end|floatformat:1 }}s
+                                    </span>
+                                  {% endif %}
+                                </div>
+                              </div>
+                            {% endfor %}
+                          </div>
+                        </div>
+                      {% endif %}
                     </div>
                   {% endif %}
 
@@ -152,299 +151,924 @@
           </div>
         </div>
       {% endfor %}
-
-      <p class="hint-text">Text segments from file</p>
     </div>
 
+    <div
+      id="paneResizer"
+      class="pane-resizer"
+      role="separator"
+      aria-orientation="vertical"
+      aria-label="Resize panels"
+      tabindex="0"
+    ></div>
 
-    <!-- ======================================================
-         RIGHT PANEL — TRANSCRIPT VIEWER
-         Shows transcript for clicked snippet + highlights snippet text.
-         ====================================================== -->
-<div class="text-panel" style="height: 100vh; display: flex; flex-direction: column;">
-  <h2>About</h2>
+    <div class="text-panel glass">
+      <div class="insight-header-row">
+        <h2>Audio Insight</h2>
+        <div class="audio-player audio-player-inline">
+          <audio id="audioPlayer" controls preload="metadata" style="width: 100%;">
+            Your browser does not support the audio element.
+          </audio>
+          <div class="audio-time" id="audioTime"></div>
+        </div>
+      </div>
 
-  <div class="about-section">
-    <div class="about-label"></div>
-    <div class="about-content" id="aboutContent">
-      Click a snippet to load transcript
+      <div class="about-section">
+        <div class="about-label">Current Selection</div>
+        <div class="about-content" id="aboutContent">Click a snippet to load transcript and audio context.</div>
+      </div>
+
+      <div class="transcript-scroll-container">
+        <div class="transcript-content" id="transcriptContent">
+          <p class="hint-text">Click a snippet to focus the matching transcript passage here.</p>
+        </div>
+      </div>
     </div>
   </div>
 
-  <div class="audio-player">
-    <div class="about-label">Audio</div>
-    <audio id="audioPlayer" controls preload="metadata" style="width: 100%;">
-      Your browser does not support the audio element.
-    </audio>
-    <div class="audio-time" id="audioTime"></div>
-  </div>
-
-  <!-- Transcript takes remaining space and scrolls internally -->
-  <div class="transcript-scroll-container" style="flex: 1; overflow-y: auto; border: 1px solid #ddd; margin-top: 15px;">
-    <div class="transcript-content" id="transcriptContent">
-      <p>Full transcript will appear here…</p>
+  <div id="uploadBackdrop" class="modal-backdrop" hidden></div>
+  <aside id="uploadModal" class="upload-modal glass" aria-hidden="true">
+    <div class="upload-modal-header">
+      <h3>Add New Audio</h3>
+      <button type="button" id="closeUploadModalBtn" class="ghost-btn small">Close</button>
     </div>
-  </div>
-</div>
 
+    <form method="post" action="{% url 'dashboard' %}" enctype="multipart/form-data" class="upload-form">
+      {% csrf_token %}
+      <div class="form-group">
+        <label for="audioFile">Upload Audio</label>
+        <input type="file" id="audioFile" name="audio_file" accept="audio/*" required />
+      </div>
 
-  <!-- ======================================================
-       EMBED METADATA JSON INTO PAGE (SAFE)
-       This allows JS to look up full transcript text by:
-         META[category_name][source_file].transcription.text
-       ====================================================== -->
+      <div class="form-group">
+        <label for="category">Category</label>
+        <input type="text" id="category" name="category" placeholder="Enter machine/category" value="{{ category_submitted|default:'' }}" required />
+      </div>
+
+      <div class="form-group">
+        <label for="authorName">Your Name</label>
+        <input type="text" id="authorName" name="author_name" placeholder="Enter your name" value="{{ author_submitted|default:'' }}" />
+      </div>
+
+      <div class="upload-actions">
+        <button class="submit-btn" type="submit">Process Audio</button>
+      </div>
+    </form>
+  </aside>
+
+  <div id="libraryBackdrop" class="library-backdrop" hidden></div>
+  <aside id="libraryPanel" class="library-panel glass" aria-hidden="true">
+    <div class="library-header">
+      <h3>Audio Navigator</h3>
+      <button type="button" id="closeLibraryBtn" class="ghost-btn small">Close</button>
+    </div>
+    <div class="library-list" id="libraryList">
+      {% if uploads %}
+        {% for upload in uploads %}
+          <div class="library-row">
+            <button
+              type="button"
+              class="library-item"
+              data-file="{{ upload.audio_file|escapejs }}"
+              data-category="{{ upload.category|escapejs }}"
+              data-author="{{ upload.author|default:''|escapejs }}"
+            >
+              <span class="library-file">{{ upload.audio_file }}</span>
+              <span class="library-meta">{{ upload.category }}{% if upload.author %} &middot; {{ upload.author }}{% endif %} &middot; {{ upload.date }}</span>
+            </button>
+            <form
+              method="post"
+              action="{% url 'delete_upload' upload.id %}"
+              class="library-delete-form"
+              onsubmit="return confirm('Delete {{ upload.audio_file|escapejs }} and all related data?');"
+            >
+              {% csrf_token %}
+              <button type="submit" class="danger-btn small">Delete</button>
+            </form>
+          </div>
+        {% endfor %}
+      {% else %}
+        <p class="hint-text">No files indexed yet.</p>
+      {% endif %}
+    </div>
+  </aside>
+
   {{ meta|json_script:"kb-meta" }}
+  {{ uploads|json_script:"kb-uploads" }}
 
+  <script>
+    const metaEl = document.getElementById("kb-meta");
+    const uploadsEl = document.getElementById("kb-uploads");
+    const META = metaEl ? JSON.parse(metaEl.textContent) : {};
+    const UPLOADS = uploadsEl ? JSON.parse(uploadsEl.textContent) : [];
+    const AUDIO_BLOB_CACHE = new Map();
 
-<script>
-  // =============================
-  // LEFT PANEL HELPERS (UI only)
-  // =============================
-  document.getElementById('audioFile').addEventListener('change', function (e) {
-    const fileName = e.target.files[0]?.name || '';
-    document.getElementById('audioFileName').value = fileName;
-  });
+    function escapeHtml(str) {
+      return (str || "")
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#039;");
+    }
 
-  document.querySelector('.submit-btn').addEventListener('click', function () {
-    const status = document.getElementById('processingStatus');
-    status.style.display = 'block';
-    status.textContent = 'Processing...';
-    setTimeout(() => {
-      status.textContent = 'Processing... DONE!';
-    }, 2000);
-  });
+    function normalizeForSearch(s) {
+      return (s || "").replace(/\s+/g, " ").trim().toLowerCase();
+    }
 
-  // =============================
-  // COLLAPSIBLE HELPERS
-  // =============================
-  function bindCollapsible(selector, contentClass) {
-    document.querySelectorAll(selector).forEach(header => {
-      header.addEventListener('click', function () {
-        this.classList.toggle('collapsed');
-        const content = this.nextElementSibling;
+    function formatTime(sec) {
+      if (sec == null || Number.isNaN(sec)) return "";
+      const s = Math.max(0, sec);
+      const m = Math.floor(s / 60);
+      const r = (s % 60).toFixed(1).padStart(4, "0");
+      return `${m}:${r}`;
+    }
 
-        if (content && (!contentClass || content.classList.contains(contentClass))) {
-          content.style.display = (content.style.display === 'none') ? 'block' : 'none';
+    function parseMaybeFloat(value) {
+      if (value === "" || value == null) return null;
+      const number = parseFloat(value);
+      return Number.isNaN(number) ? null : number;
+    }
+
+    function highlightFirstMatch(sourceText, rawNeedle, markClass) {
+      const source = sourceText || "";
+      const needle = (rawNeedle || "").trim();
+      if (!needle) {
+        return { html: escapeHtml(source), hasMatch: false };
+      }
+
+      const lowerSource = source.toLowerCase();
+      let lowerNeedle = needle.toLowerCase();
+      let index = lowerSource.indexOf(lowerNeedle);
+
+      if (index === -1) {
+        const fallbackNeedle = lowerNeedle.slice(0, Math.min(42, lowerNeedle.length)).trim();
+        if (!fallbackNeedle) {
+          return { html: escapeHtml(source), hasMatch: false };
         }
-      });
-    });
-  }
+        lowerNeedle = fallbackNeedle;
+        index = lowerSource.indexOf(lowerNeedle);
+      }
 
-  bindCollapsible('.category-header', 'category-content');
-  bindCollapsible('.subcategory-header', 'subcategory-content');
-  bindCollapsible('.snippets-header', 'snippets-content');
+      if (index === -1) {
+        return { html: escapeHtml(source), hasMatch: false };
+      }
 
-  // =============================
-  // METADATA
-  // =============================
-  const META = JSON.parse(document.getElementById("kb-meta").textContent);
+      const before = escapeHtml(source.slice(0, index));
+      const match = escapeHtml(source.slice(index, index + lowerNeedle.length));
+      const after = escapeHtml(source.slice(index + lowerNeedle.length));
+      return {
+        html: `${before}<mark class="${markClass}">${match}</mark>${after}`,
+        hasMatch: true,
+      };
+    }
 
-  function escapeHtml(str) {
-    return (str || "")
-      .replaceAll("&", "&amp;")
-      .replaceAll("<", "&lt;")
-      .replaceAll(">", "&gt;")
-      .replaceAll('"', "&quot;")
-      .replaceAll("'", "&#039;");
-  }
+    function syncBodyOverlayState() {
+      const uploadOpen = document.getElementById("uploadModal")?.classList.contains("open");
+      const libraryOpen = document.getElementById("libraryPanel")?.classList.contains("open");
+      document.body.classList.toggle("modal-open", Boolean(uploadOpen || libraryOpen));
+    }
 
-  function normalizeForSearch(s) {
-    return (s || "").replace(/\s+/g, " ").trim().toLowerCase();
-  }
+    async function loadAudioAsBlob(src) {
+      const audio = document.getElementById("audioPlayer");
+      if (!audio) return;
 
-  // =============================
-  // AUDIO HELPERS
-  // =============================
-  function formatTime(sec) {
-    if (sec == null || isNaN(sec)) return "";
-    const s = Math.max(0, sec);
-    const m = Math.floor(s / 60);
-    const r = (s % 60).toFixed(1).padStart(4, "0");
-    return `${m}:${r}`; // 1:05.3
-  }
+      if (AUDIO_BLOB_CACHE.has(src)) {
+        audio.src = AUDIO_BLOB_CACHE.get(src);
+        return;
+      }
 
-  async function setAudioSource(file) {
-    const src = `data/audio/${encodeURIComponent(file)}`; // your current path
-    const audio = document.getElementById("audioPlayer");
-    if (!audio) return;
+      const response = await fetch(src);
+      if (!response.ok) throw new Error(`Failed to fetch audio: ${response.status}`);
+      const blob = await response.blob();
+      const blobUrl = URL.createObjectURL(blob);
+      AUDIO_BLOB_CACHE.set(src, blobUrl);
+      audio.src = blobUrl;
+    }
 
-    if (audio.dataset.currentSrc === src) return;
-    audio.dataset.currentSrc = src;
+    async function setAudioSource(file) {
+      const src = `/data/audio/${encodeURIComponent(file)}`;
+      const audio = document.getElementById("audioPlayer");
+      if (!audio) return;
+      if (audio.dataset.currentSrc === src) return;
+      audio.dataset.currentSrc = src;
+      await loadAudioAsBlob(src);
+    }
 
-    await loadAudioAsBlob(src);
-  }
+    function seekAudio(seconds) {
+      const audio = document.getElementById("audioPlayer");
+      if (!audio || seconds == null || Number.isNaN(seconds)) return;
 
-
-  function seekAudio(seconds) {
-    const audio = document.getElementById("audioPlayer");
-    if (!audio || seconds == null || isNaN(seconds)) return;
-
-    if (audio.readyState < 1) {
-      audio.addEventListener("loadedmetadata", () => {
+      if (audio.readyState < 1) {
+        audio.addEventListener("loadedmetadata", () => {
+          audio.currentTime = Math.max(0, seconds);
+          audio.play().catch(() => {});
+        }, { once: true });
+      } else {
         audio.currentTime = Math.max(0, seconds);
         audio.play().catch(() => {});
-      }, { once: true });
-    } else {
-      audio.currentTime = Math.max(0, seconds);
-      audio.play().catch(() => {});
-    }
-  }
-
-  const AUDIO_BLOB_CACHE = new Map();
-
-  async function loadAudioAsBlob(src) {
-    const audio = document.getElementById("audioPlayer");
-    if (!audio) return;
-
-    // reuse cached blob url for same file
-    if (AUDIO_BLOB_CACHE.has(src)) {
-      audio.src = AUDIO_BLOB_CACHE.get(src);
-      return;
+      }
     }
 
-    const res = await fetch(src);
-    if (!res.ok) throw new Error(`Failed to fetch audio: ${res.status}`);
-
-    const blob = await res.blob();
-    const blobUrl = URL.createObjectURL(blob);
-
-    AUDIO_BLOB_CACHE.set(src, blobUrl);
-    audio.src = blobUrl;
-  }
-
-
-  // =============================
-  // TRANSCRIPT RENDERING
-  // =============================
-  function renderTranscriptSegments(segments, activeIndex, snippetText) {
-    const container = document.getElementById("transcriptContent");
-    if (!container) return;
-
-    if (!Array.isArray(segments) || segments.length === 0) {
-      container.innerHTML = `<p class="hint-text">No segments found.</p>`;
-      return;
-    }
-
-    const snNorm = normalizeForSearch(snippetText);
-
-    container.innerHTML = segments.map((seg, i) => {
-      const start = seg.start ?? null;
-      const end = seg.end ?? null;
-
-      // OPTIONAL: highlight snippet text *inside* the active segment
-      let segText = seg.text || "";
-      if (i === activeIndex && snippetText) {
-        const idx = segText.toLowerCase().indexOf((snippetText || "").toLowerCase());
-        if (idx !== -1) {
-          const before = escapeHtml(segText.slice(0, idx));
-          const match = escapeHtml(segText.slice(idx, idx + snippetText.length));
-          const after = escapeHtml(segText.slice(idx + snippetText.length));
-          segText = `${before}<mark class="hl">${match}</mark>${after}`;
-        } else {
-          // fallback: just escape
-          segText = escapeHtml(segText);
+    function bindCollapsible(selector, contentClass) {
+      document.querySelectorAll(selector).forEach(header => {
+        const initialContent = header.nextElementSibling;
+        if (initialContent && (!contentClass || initialContent.classList.contains(contentClass))) {
+          const initiallyCollapsed = initialContent.style.display === "none";
+          header.classList.toggle("collapsed", initiallyCollapsed);
         }
-      } else {
-        segText = escapeHtml(segText);
+
+        header.addEventListener("click", function () {
+          const content = this.nextElementSibling;
+          if (content && (!contentClass || content.classList.contains(contentClass))) {
+            const shouldOpen = content.style.display === "none";
+            content.style.display = shouldOpen ? "block" : "none";
+            this.classList.toggle("collapsed", !shouldOpen);
+          }
+        });
+      });
+    }
+
+    function setupSummaryPaneToggles() {
+      document.querySelectorAll(".subcategory").forEach(subcategory => {
+        const header = subcategory.querySelector(".subcategory-header");
+        const content = subcategory.querySelector(".subcategory-content");
+        const card = subcategory.querySelector(".summary-card");
+        if (!header || !card) return;
+
+        const buttons = Array.from(header.querySelectorAll(".summary-toggle-btn"));
+        if (buttons.length === 0) return;
+
+        const panes = {
+          summary: card.querySelector(".summary-pane-summary"),
+          snippets: card.querySelector(".summary-pane-snippets"),
+        };
+
+        function activatePane(targetPane) {
+          buttons.forEach(button => {
+            button.classList.toggle("is-active", button.dataset.pane === targetPane);
+          });
+
+          Object.entries(panes).forEach(([key, pane]) => {
+            if (!pane) return;
+            const isActive = key === targetPane;
+            pane.hidden = !isActive;
+            pane.classList.toggle("is-active", isActive);
+          });
+        }
+
+        buttons.forEach(button => {
+          button.addEventListener("click", event => {
+            event.preventDefault();
+            event.stopPropagation();
+            if (content && content.style.display === "none") {
+              content.style.display = "block";
+              header.classList.remove("collapsed");
+            }
+            activatePane(button.dataset.pane || "summary");
+          });
+        });
+
+        const defaultButton = buttons.find(button => button.classList.contains("is-active")) || buttons[0];
+        activatePane(defaultButton.dataset.pane || "summary");
+      });
+    }
+
+    function findEntry(category, file) {
+      const direct = META?.[category]?.[file];
+      if (direct) return direct;
+
+      for (const categoryData of Object.values(META || {})) {
+        if (categoryData && categoryData[file]) {
+          return categoryData[file];
+        }
+      }
+      return null;
+    }
+
+    function findBestSegmentIndex(segments, snippetText, snippetStart) {
+      if (!Array.isArray(segments) || segments.length === 0) return -1;
+
+      if (snippetStart != null) {
+        let nearestIndex = -1;
+        let smallestDelta = Number.POSITIVE_INFINITY;
+
+        for (let i = 0; i < segments.length; i += 1) {
+          const start = segments[i]?.start;
+          const end = segments[i]?.end;
+          if (start != null && end != null && snippetStart >= start && snippetStart <= end) {
+            return i;
+          }
+          if (start != null) {
+            const delta = Math.abs(start - snippetStart);
+            if (delta < smallestDelta) {
+              smallestDelta = delta;
+              nearestIndex = i;
+            }
+          }
+        }
+        if (nearestIndex !== -1) return nearestIndex;
       }
 
-      const cls = (i === activeIndex) ? "segment active" : "segment";
+      const snippetNormalized = normalizeForSearch(snippetText);
+      if (!snippetNormalized) return -1;
 
-      return `
-        <div class="${cls}" data-start="${start}">
-          <span class="seg-time">[${formatTime(start)} – ${formatTime(end)}]</span>
-          <span class="seg-text">${segText}</span>
-        </div>
+      for (let i = 0; i < segments.length; i += 1) {
+        const segmentText = normalizeForSearch(segments[i]?.text || "");
+        if (segmentText.includes(snippetNormalized) || snippetNormalized.includes(segmentText)) {
+          return i;
+        }
+      }
+
+      const snippetTokens = snippetNormalized
+        .split(" ")
+        .filter(token => token.length > 2)
+        .slice(0, 14);
+
+      if (snippetTokens.length > 0) {
+        let bestIndex = -1;
+        let bestScore = 0;
+
+        for (let i = 0; i < segments.length; i += 1) {
+          const segmentText = normalizeForSearch(segments[i]?.text || "");
+          if (!segmentText) continue;
+          const score = snippetTokens.reduce((count, token) => {
+            return count + (segmentText.includes(token) ? 1 : 0);
+          }, 0);
+
+          if (score > bestScore) {
+            bestScore = score;
+            bestIndex = i;
+          }
+        }
+
+        const threshold = Math.max(2, Math.ceil(snippetTokens.length * 0.35));
+        if (bestIndex !== -1 && bestScore >= threshold) {
+          return bestIndex;
+        }
+      }
+
+      return -1;
+    }
+
+    function scrollWithinTranscript(viewport, target, topOffset = 20) {
+      if (!viewport || !target) return;
+      const viewportRect = viewport.getBoundingClientRect();
+      const targetRect = target.getBoundingClientRect();
+      const delta = targetRect.top - viewportRect.top - topOffset;
+
+      viewport.scrollTo({
+        top: Math.max(0, viewport.scrollTop + delta),
+        behavior: "smooth",
+      });
+    }
+
+    function splitTranscriptIntoChunks(text, targetLength = 280) {
+      const normalized = (text || "").replace(/\s+/g, " ").trim();
+      if (!normalized) return [];
+
+      const sentenceCandidates = normalized.match(/[^.!?]+[.!?]?/g) || [normalized];
+      const chunks = [];
+      let current = "";
+
+      sentenceCandidates.forEach(sentence => {
+        const part = sentence.trim();
+        if (!part) return;
+
+        if (!current) {
+          current = part;
+          return;
+        }
+
+        if ((current.length + 1 + part.length) > targetLength) {
+          chunks.push(current);
+          current = part;
+        } else {
+          current = `${current} ${part}`;
+        }
+      });
+
+      if (current) chunks.push(current);
+      return chunks;
+    }
+
+    function findBestTextMatchIndex(chunks, snippetText) {
+      if (!Array.isArray(chunks) || chunks.length === 0) return -1;
+
+      const snippetNormalized = normalizeForSearch(snippetText);
+      if (!snippetNormalized) return -1;
+
+      for (let i = 0; i < chunks.length; i += 1) {
+        const chunkText = normalizeForSearch(chunks[i] || "");
+        if (chunkText.includes(snippetNormalized) || snippetNormalized.includes(chunkText)) {
+          return i;
+        }
+      }
+
+      const snippetTokens = snippetNormalized
+        .split(" ")
+        .filter(token => token.length > 2)
+        .slice(0, 14);
+
+      if (snippetTokens.length === 0) return -1;
+
+      let bestIndex = -1;
+      let bestScore = 0;
+
+      for (let i = 0; i < chunks.length; i += 1) {
+        const chunkText = normalizeForSearch(chunks[i] || "");
+        if (!chunkText) continue;
+
+        const score = snippetTokens.reduce((count, token) => {
+          return count + (chunkText.includes(token) ? 1 : 0);
+        }, 0);
+
+        if (score > bestScore) {
+          bestScore = score;
+          bestIndex = i;
+        }
+      }
+
+      const threshold = Math.max(2, Math.ceil(snippetTokens.length * 0.35));
+      return bestIndex !== -1 && bestScore >= threshold ? bestIndex : -1;
+    }
+
+    function getVisibleSnippetLimit() {
+      const viewportHeight = window.innerHeight || 900;
+      if (viewportHeight >= 1200) return 6;
+      if (viewportHeight >= 940) return 5;
+      if (viewportHeight >= 760) return 4;
+      return 3;
+    }
+
+    function computeVisibleWindow(totalCount, activeIndex, maxVisible) {
+      if (!Number.isFinite(totalCount) || totalCount <= 0) {
+        return { startIndex: 0, endIndex: 0 };
+      }
+
+      const visible = Math.max(1, Math.min(maxVisible, totalCount));
+      const maxStart = Math.max(0, totalCount - visible);
+      // Keep the selected snippet at the top whenever there is enough room.
+      const preferredStart = activeIndex >= 0 ? activeIndex : 0;
+      const startIndex = Math.min(Math.max(0, preferredStart), maxStart);
+      return {
+        startIndex,
+        endIndex: startIndex + visible,
+      };
+    }
+
+    function renderTranscript(entry, activeIndex, snippetText) {
+      const container = document.getElementById("transcriptContent");
+      if (!container) return;
+
+      const segments = entry?.transcription?.segments || [];
+      const fullText = entry?.transcription?.text || "";
+      const transcriptViewport = document.querySelector(".transcript-scroll-container");
+      const transcriptText = fullText || segments.map(segment => segment?.text || "").join(" ").trim();
+      const hasSegments = Array.isArray(segments) && segments.length > 0;
+
+      if (!transcriptText && (!Array.isArray(segments) || segments.length === 0)) {
+        container.innerHTML = `<p class="hint-text">No transcript available yet.</p>`;
+        return;
+      }
+
+      const maxVisible = getVisibleSnippetLimit();
+
+      if (hasSegments) {
+        const { startIndex, endIndex } = computeVisibleWindow(segments.length, activeIndex, maxVisible);
+        const visibleSegments = segments.slice(startIndex, endIndex);
+
+        container.innerHTML = `
+          <section class="transcript-flow">
+            ${visibleSegments.map((segment, offset) => {
+              const index = startIndex + offset;
+              const start = segment.start ?? null;
+              const end = segment.end ?? null;
+              let segmentTextHtml = escapeHtml(segment.text || "");
+              if (index === activeIndex) {
+                segmentTextHtml = highlightFirstMatch(segment.text || "", snippetText, "hl").html;
+              }
+              const cssClass = index === activeIndex ? "segment active" : "segment";
+              return `
+                <div class="${cssClass}" data-start="${start}">
+                  <span class="seg-text">${segmentTextHtml}</span>
+                  <span class="seg-time">${formatTime(start)} - ${formatTime(end)}</span>
+                </div>
+              `;
+            }).join("")}
+          </section>
+        `;
+      } else {
+        const chunks = splitTranscriptIntoChunks(transcriptText);
+        const activeChunkIndex = findBestTextMatchIndex(chunks, snippetText);
+        const { startIndex, endIndex } = computeVisibleWindow(chunks.length, activeChunkIndex, maxVisible);
+        const visibleChunks = chunks.slice(startIndex, endIndex);
+
+        container.innerHTML = `
+          <section class="transcript-flow">
+            ${visibleChunks.map((chunk, offset) => {
+              const index = startIndex + offset;
+              let chunkHtml = escapeHtml(chunk || "");
+              if (index === activeChunkIndex) {
+                chunkHtml = highlightFirstMatch(chunk || "", snippetText, "hl").html;
+              }
+              const cssClass = index === activeChunkIndex ? "segment active" : "segment";
+              return `
+                <div class="${cssClass}">
+                  <span class="seg-text">${chunkHtml}</span>
+                </div>
+              `;
+            }).join("")}
+          </section>
+        `;
+      }
+
+      container.querySelectorAll(".segment").forEach(segmentElement => {
+        segmentElement.addEventListener("click", () => {
+          const start = parseFloat(segmentElement.dataset.start);
+          if (!Number.isNaN(start)) {
+            seekAudio(start);
+          }
+        });
+      });
+
+      if (!transcriptViewport) return;
+
+      requestAnimationFrame(() => {
+        const activeSegment = container.querySelector(".segment.active");
+        if (activeSegment) {
+          scrollWithinTranscript(transcriptViewport, activeSegment);
+          return;
+        }
+
+        const inlineHit = container.querySelector("mark.hl");
+        if (inlineHit) {
+          scrollWithinTranscript(transcriptViewport, inlineHit);
+          return;
+        }
+
+        transcriptViewport.scrollTo({ top: 0, behavior: "smooth" });
+      });
+    }
+
+    function updateAbout(entry, file, start, end) {
+      const about = document.getElementById("aboutContent");
+      if (!about) return;
+      const author = entry?.author || "";
+      const date = entry?.date || "";
+
+      about.innerHTML = `
+        <div><strong>Filename:</strong> ${escapeHtml(file)}</div>
+        <div><strong>Author:</strong> ${escapeHtml(author)}</div>
+        <div><strong>Date:</strong> ${escapeHtml(date)}</div>
       `;
-    }).join("");
+    }
 
-    // click transcript segment => seek audio
-    container.querySelectorAll(".segment").forEach(segEl => {
-      segEl.addEventListener("click", () => {
-        const start = parseFloat(segEl.dataset.start);
-        if (!isNaN(start)) seekAudio(start);
+    function openParentsForSnippet(snippetElement) {
+      const subcategoryContent = snippetElement.closest(".subcategory-content");
+      const subcategory = snippetElement.closest(".subcategory");
+      const categoryContent = snippetElement.closest(".category-content");
+      const category = snippetElement.closest(".category");
+
+      if (subcategory) {
+        const snippetsToggle = subcategory.querySelector('.subcategory-header .summary-toggle-btn[data-pane="snippets"]');
+        if (snippetsToggle && !snippetsToggle.classList.contains("is-active")) {
+          snippetsToggle.click();
+        }
+      }
+
+      if (subcategoryContent) subcategoryContent.style.display = "block";
+      if (categoryContent) categoryContent.style.display = "block";
+
+      const subcategoryHeader = subcategory ? subcategory.querySelector(".subcategory-header") : null;
+      const categoryHeader = category ? category.querySelector(".category-header") : null;
+
+      if (subcategoryHeader) subcategoryHeader.classList.remove("collapsed");
+      if (categoryHeader) categoryHeader.classList.remove("collapsed");
+    }
+
+    function triggerSnippetSelection(element) {
+      if (!element) return;
+      openParentsForSnippet(element);
+      element.click();
+    }
+
+    function navigateToFile(fileName) {
+      const snippets = Array.from(document.querySelectorAll(".snippet-item"));
+      const target = snippets.find(item => item.dataset.file === fileName);
+      if (target) {
+        triggerSnippetSelection(target);
+        return true;
+      }
+
+      const upload = (UPLOADS || []).find(item => item.audio_file === fileName);
+      if (upload) {
+        const info = `Filename: ${fileName}<br>Category: ${upload.category}<br>Author: ${upload.author || ""}`;
+        const about = document.getElementById("aboutContent");
+        if (about) about.innerHTML = info;
+      }
+      return false;
+    }
+
+    function setupUploadModal() {
+      const modal = document.getElementById("uploadModal");
+      const backdrop = document.getElementById("uploadBackdrop");
+      const openButton = document.getElementById("openUploadModalBtn");
+      const closeButton = document.getElementById("closeUploadModalBtn");
+      const fileInput = document.getElementById("audioFile");
+      const shouldOpenOnLoad = document.body.dataset.openUploadModal === "1";
+
+      function openModal() {
+        if (!modal || !backdrop) return;
+        modal.classList.add("open");
+        modal.setAttribute("aria-hidden", "false");
+        backdrop.hidden = false;
+        syncBodyOverlayState();
+        if (fileInput) fileInput.focus();
+      }
+
+      function closeModal() {
+        if (!modal || !backdrop) return;
+        modal.classList.remove("open");
+        modal.setAttribute("aria-hidden", "true");
+        backdrop.hidden = true;
+        syncBodyOverlayState();
+      }
+
+      if (openButton) openButton.addEventListener("click", openModal);
+      if (closeButton) closeButton.addEventListener("click", closeModal);
+      if (backdrop) backdrop.addEventListener("click", closeModal);
+
+      document.addEventListener("keydown", event => {
+        if (event.key === "Escape" && modal?.classList.contains("open")) {
+          closeModal();
+        }
+      });
+
+      if (shouldOpenOnLoad) {
+        openModal();
+      }
+      syncBodyOverlayState();
+    }
+
+    function setupLibraryPanel() {
+      const panel = document.getElementById("libraryPanel");
+      const backdrop = document.getElementById("libraryBackdrop");
+      const openButtons = [
+        document.getElementById("openLibraryBtn"),
+      ].filter(Boolean);
+      const closeButton = document.getElementById("closeLibraryBtn");
+
+      function openPanel() {
+        if (!panel || !backdrop) return;
+        panel.classList.add("open");
+        panel.setAttribute("aria-hidden", "false");
+        backdrop.hidden = false;
+        syncBodyOverlayState();
+      }
+
+      function closePanel() {
+        if (!panel || !backdrop) return;
+        panel.classList.remove("open");
+        panel.setAttribute("aria-hidden", "true");
+        backdrop.hidden = true;
+        syncBodyOverlayState();
+      }
+
+      openButtons.forEach(button => button.addEventListener("click", openPanel));
+      if (closeButton) closeButton.addEventListener("click", closePanel);
+      if (backdrop) backdrop.addEventListener("click", closePanel);
+
+      document.querySelectorAll(".library-item").forEach(button => {
+        button.addEventListener("click", () => {
+          const file = button.dataset.file;
+          if (file) {
+            navigateToFile(file);
+          }
+          closePanel();
+        });
+      });
+
+      document.addEventListener("keydown", event => {
+        if (event.key === "Escape" && panel?.classList.contains("open")) {
+          closePanel();
+        }
+      });
+
+      syncBodyOverlayState();
+    }
+
+    function setupPaneResizer() {
+      const container = document.querySelector(".container");
+      const resizer = document.getElementById("paneResizer");
+      const outputPanel = document.querySelector(".output-panel");
+      if (!container || !resizer || !outputPanel) return;
+
+      const storageKey = "voicebased.leftPanelWidthPx";
+      const mobileQuery = window.matchMedia("(max-width: 1200px)");
+      const minLeft = 340;
+      const minRight = 420;
+      let isDragging = false;
+
+      function clampLeftWidth(rawLeftWidth) {
+        const containerRect = container.getBoundingClientRect();
+        const maxLeft = Math.max(minLeft, containerRect.width - minRight);
+        return Math.min(Math.max(rawLeftWidth, minLeft), maxLeft);
+      }
+
+      function applyLeftWidth(leftWidth) {
+        container.style.setProperty("--left-panel-width", `${Math.round(leftWidth)}px`);
+      }
+
+      function saveLeftWidth(leftWidth) {
+        try {
+          localStorage.setItem(storageKey, String(Math.round(leftWidth)));
+        } catch {
+          // Local storage can be blocked in private contexts; safe to ignore.
+        }
+      }
+
+      function loadSavedWidth() {
+        try {
+          const raw = localStorage.getItem(storageKey);
+          if (!raw) return null;
+          const value = parseFloat(raw);
+          return Number.isFinite(value) ? value : null;
+        } catch {
+          return null;
+        }
+      }
+
+      function updateFromClientX(clientX) {
+        const rect = container.getBoundingClientRect();
+        const rawLeft = clientX - rect.left;
+        const leftWidth = clampLeftWidth(rawLeft);
+        applyLeftWidth(leftWidth);
+        saveLeftWidth(leftWidth);
+      }
+
+      function stopDragging(pointerId) {
+        isDragging = false;
+        document.body.classList.remove("is-resizing-panels");
+        if (pointerId != null && resizer.hasPointerCapture(pointerId)) {
+          resizer.releasePointerCapture(pointerId);
+        }
+      }
+
+      const savedWidth = loadSavedWidth();
+      if (savedWidth && !mobileQuery.matches) {
+        applyLeftWidth(clampLeftWidth(savedWidth));
+      }
+
+      resizer.addEventListener("pointerdown", event => {
+        if (mobileQuery.matches) return;
+        isDragging = true;
+        document.body.classList.add("is-resizing-panels");
+        resizer.setPointerCapture(event.pointerId);
+        updateFromClientX(event.clientX);
+        event.preventDefault();
+      });
+
+      resizer.addEventListener("pointermove", event => {
+        if (!isDragging) return;
+        updateFromClientX(event.clientX);
+      });
+
+      resizer.addEventListener("pointerup", event => stopDragging(event.pointerId));
+      resizer.addEventListener("pointercancel", event => stopDragging(event.pointerId));
+
+      resizer.addEventListener("keydown", event => {
+        if (mobileQuery.matches) return;
+        if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+        event.preventDefault();
+        const step = event.key === "ArrowLeft" ? -28 : 28;
+        const currentLeft = outputPanel.getBoundingClientRect().width;
+        const nextLeft = clampLeftWidth(currentLeft + step);
+        applyLeftWidth(nextLeft);
+        saveLeftWidth(nextLeft);
+      });
+
+      resizer.addEventListener("dblclick", () => {
+        container.style.removeProperty("--left-panel-width");
+        try {
+          localStorage.removeItem(storageKey);
+        } catch {
+          // ignore storage failures
+        }
+      });
+
+      mobileQuery.addEventListener("change", event => {
+        if (event.matches) {
+          container.style.removeProperty("--left-panel-width");
+        } else {
+          const stored = loadSavedWidth();
+          if (stored) {
+            applyLeftWidth(clampLeftWidth(stored));
+          }
+        }
+      });
+    }
+
+    function setupCategoryBrowser() {
+      const browser = document.getElementById("categoryBrowser");
+      if (!browser) return;
+
+      const chips = Array.from(browser.querySelectorAll(".category-chip"));
+      const categoryBlocks = Array.from(document.querySelectorAll(".category[data-category-name]"));
+      if (chips.length === 0 || categoryBlocks.length === 0) return;
+
+      function applyFilter(targetCategory) {
+        chips.forEach(chip => {
+          chip.classList.toggle("is-active", chip.dataset.target === targetCategory);
+        });
+
+        categoryBlocks.forEach(block => {
+          const blockCategory = block.dataset.categoryName || "";
+          const visible = blockCategory === targetCategory;
+          block.style.display = visible ? "" : "none";
+
+          if (visible) {
+            const header = block.querySelector(".category-header");
+            const content = block.querySelector(".category-content");
+            if (content) content.style.display = "block";
+            if (header) header.classList.remove("collapsed");
+          }
+        });
+      }
+
+      chips.forEach(chip => {
+        chip.addEventListener("click", () => {
+          applyFilter(chip.dataset.target || "");
+        });
+      });
+
+      const firstCategory = chips[0]?.dataset.target || "";
+      if (firstCategory) {
+        applyFilter(firstCategory);
+      }
+    }
+
+    bindCollapsible(".category-header", "category-content");
+    bindCollapsible(".subcategory-header", "subcategory-content");
+
+    document.querySelectorAll(".snippet-item").forEach(element => {
+      element.addEventListener("click", async () => {
+        document.querySelectorAll(".snippet-item.selected")
+          .forEach(selected => selected.classList.remove("selected"));
+        element.classList.add("selected");
+
+        const category = element.dataset.category;
+        const file = element.dataset.file;
+        const snippet = element.dataset.snippet || "";
+        const snippetStart = parseMaybeFloat(element.dataset.start);
+        const snippetEnd = parseMaybeFloat(element.dataset.end);
+
+        const entry = findEntry(category, file);
+        const segments = entry?.transcription?.segments || [];
+        const activeIndex = findBestSegmentIndex(segments, snippet, snippetStart);
+
+        updateAbout(entry, file, snippetStart, snippetEnd);
+        renderTranscript(entry, activeIndex, snippet);
+
+        try {
+          await setAudioSource(file);
+          const segmentStart = activeIndex >= 0 ? segments[activeIndex]?.start : null;
+          const targetStart = snippetStart != null ? snippetStart : segmentStart;
+          if (targetStart != null) {
+            seekAudio(targetStart);
+          }
+        } catch (error) {
+          const audioTime = document.getElementById("audioTime");
+          if (audioTime) {
+            audioTime.textContent = `Could not load audio: ${error.message}`;
+          }
+        }
       });
     });
 
-    const active = container.querySelector(".segment.active");
-    if (active) active.scrollIntoView({ behavior: "smooth", block: "center" });
-  }
+    document.querySelectorAll(".audio-link").forEach(link => {
+      link.addEventListener("click", async event => {
+        event.preventDefault();
+        event.stopPropagation();
 
-  function findBestSegmentIndex(segments, snippetText) {
-    if (!Array.isArray(segments) || !snippetText) return -1;
-    const sn = normalizeForSearch(snippetText);
-    if (!sn) return -1;
-
-    for (let i = 0; i < segments.length; i++) {
-      const st = normalizeForSearch(segments[i]?.text || "");
-      if (st.includes(sn) || sn.includes(st)) return i;
-    }
-
-    const snShort = sn.slice(0, 40);
-    if (snShort.length > 10) {
-      for (let i = 0; i < segments.length; i++) {
-        const st = normalizeForSearch(segments[i]?.text || "");
-        if (st.includes(snShort)) return i;
-      }
-    }
-
-    return -1;
-  }
-
-  // =============================
-  // SNIPPET CLICK
-  // =============================
-  document.querySelectorAll(".snippet-item").forEach(el => {
-    el.addEventListener("click", () => {
-      document.querySelectorAll(".snippet-item.selected")
-        .forEach(x => x.classList.remove("selected"));
-      el.classList.add("selected");
-
-      const category = el.dataset.category;
-      const file = el.dataset.file;
-      const snippet = el.dataset.snippet;
-
-      const entry = META?.[category]?.[file];
-      const segments = entry?.transcription?.segments || [];
-      const activeIndex = findBestSegmentIndex(segments, snippet);
-
-      // About
-      const author = entry?.author || "";
-      const date = entry?.date || "";
-      document.getElementById("aboutContent").innerHTML =
-        `Filename: ${file}<br>
-        Author: ${author ? author : ""}<br>
-        Date: ${date ? date : ""}`;
-
-      // Audio
-      setAudioSource(file);
-      if (activeIndex !== -1) {
-        const start = segments[activeIndex]?.start;
-        seekAudio(start);
-      }
-
-      // Transcript (segment-based with timestamps)
-      renderTranscriptSegments(segments, activeIndex, snippet);
+        const file = link.dataset.file;
+        try {
+          await setAudioSource(file);
+          document.getElementById("audioPlayer")?.play().catch(() => {});
+        } catch (error) {
+          const audioTime = document.getElementById("audioTime");
+          if (audioTime) {
+            audioTime.textContent = `Could not load audio: ${error.message}`;
+          }
+        }
+      });
     });
-  });
 
-  // =============================
-  // AUDIO LINK CLICK (don’t trigger snippet click)
-  // =============================
-  document.querySelectorAll(".audio-link").forEach(a => {
-    a.addEventListener("click", (e) => {
-      e.preventDefault();
-      e.stopPropagation(); // important: prevents snippet click if you only want audio
-
-      const category = a.dataset.category;
-      const file = a.dataset.file;
-
-      setAudioSource(file);
-      // don't auto-seek here; just show player ready to play
-      document.getElementById("audioPlayer")?.play().catch(() => {});
-    });
-  });
-</script>
-
+    setupUploadModal();
+    setupLibraryPanel();
+    setupPaneResizer();
+    setupSummaryPaneToggles();
+    setupCategoryBrowser();
+  </script>
 </body>
 </html>

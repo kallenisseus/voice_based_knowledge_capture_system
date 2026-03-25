@@ -1,6 +1,11 @@
-import os
+from pathlib import Path
 
-SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-PROJECT_ROOT = os.path.abspath(os.path.join(SCRIPT_DIR, ".."))
-DATA_ROOT = os.path.join(PROJECT_ROOT, "data")
-DATABASE = os.path.join(DATA_ROOT, "database.json")
+
+# Central path constants used across AI modules.
+AI_DIR = Path(__file__).resolve().parent
+PROJECT_ROOT = AI_DIR.parent
+DATA_DIR = PROJECT_ROOT / "data"
+AUDIO_DIR = DATA_DIR / "audio"
+# Legacy JSON paths are still referenced by import helpers.
+DATABASE_FILE = DATA_DIR / "database.json"
+CATEGORIES_FILE = DATA_DIR / "categories.json"
