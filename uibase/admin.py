@@ -13,14 +13,23 @@ class TranscriptSegmentInline(admin.TabularInline):
 class AudioUploadAdmin(admin.ModelAdmin):
     list_display = (
         "stored_name",
+        "machine_type",
+        "machine_name",
         "category",
         "author",
         "recorded_on",
         "duration",
         "created_at",
     )
-    list_filter = ("category", "recorded_on", "created_at")
-    search_fields = ("stored_name", "original_name", "author", "category")
+    list_filter = ("machine_type", "category", "recorded_on", "created_at")
+    search_fields = (
+        "stored_name",
+        "original_name",
+        "author",
+        "machine_name",
+        "machine_type",
+        "category",
+    )
     inlines = [TranscriptSegmentInline]
 
 

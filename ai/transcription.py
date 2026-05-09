@@ -30,7 +30,15 @@ def get_model():
     return _model
 
 
-def transcribe_audio_file(audio_file_name: str, machine_category: str) -> dict:
+def transcribe_audio_file(
+    *,
+    audio_file_name: str,
+    machine_name: str,
+    machine_type: str = "Unassigned",
+    subcategory_paths=None,
+    hierarchy_path=None,
+    extra_tags=None,
+) -> dict:
     """Transcribe one saved audio file and return normalized transcript payload."""
     audio_path = paths.AUDIO_DIR / audio_file_name
 
@@ -46,10 +54,37 @@ def transcribe_audio_file(audio_file_name: str, machine_category: str) -> dict:
     model = get_model()
     print(f"Transcribing: {audio_path}")
 
+    normalized_subcategory_paths = []
+    for raw_path in (subcategory_paths or []):
+        if isinstance(raw_path, str):
+            parts = [part.strip() for part in raw_path.split(">")]
+        elif isinstance(raw_path, (list, tuple)):
+            parts = [str(value).strip() for value in raw_path]
+        else:
+            continue
+        path = [part for part in parts if part]
+        if path:
+            normalized_subcategory_paths.append(path)
+
+    hierarchy_path = [str(value).strip() for value in (hierarchy_path or []) if str(value).strip()]
+    extra_tags = [str(value).strip() for value in (extra_tags or []) if str(value).strip()]
+    context_parts = [
+        f"machine: {machine_name or 'unknown'}",
+        f"type: {machine_type or 'Unassigned'}",
+    ]
+    if normalized_subcategory_paths:
+        context_parts.append(
+            "subcategory paths: " + "; ".join(" > ".join(path) for path in normalized_subcategory_paths[:8])
+        )
+    if hierarchy_path:
+        context_parts.append("hierarchy: " + " > ".join(hierarchy_path))
+    if extra_tags:
+        context_parts.append("tags: " + ", ".join(extra_tags))
+
     segments_generator, info = model.transcribe(
         str(audio_path),
         beam_size=5,
-        initial_prompt=f"This is about: {machine_category}",
+        initial_prompt="This recording context is " + " | ".join(context_parts),
     )
 
     raw_segments = list(segments_generator)

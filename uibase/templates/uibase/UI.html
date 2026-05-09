@@ -4,7 +4,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Knowledge Base</title>
+  <title>Voice Operations Knowledge Hub</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -15,15 +15,15 @@
   <div class="aurora-bg"></div>
   <header class="topbar glass">
     <div class="topbar-left">
-      <button type="button" id="openLibraryBtn" class="ghost-btn">Open Audio Navigator</button>
-      <span class="topbar-count">Indexed files: {{ uploads|length }}</span>
+      <button type="button" id="openUploadModalBtn" class="submit-btn">Upload Recording</button>
     </div>
     <div class="topbar-brand">
-      <span class="topbar-kicker">Find, Summarize, Replay</span>
-      <h1>Voice Knowledge Navigator</h1>
+      <span class="topbar-kicker">Corporate Audio Intelligence</span>
+      <h1>Operations Knowledge Hub</h1>
     </div>
     <div class="topbar-actions">
-      <button type="button" id="openUploadModalBtn" class="submit-btn">Add New Audio</button>
+      <button type="button" id="openLibraryBtn" class="ghost-btn">Open Audio Library</button>
+      <span class="topbar-count" aria-live="polite">Indexed recordings: {{ uploads|length }}</span>
     </div>
   </header>
 
@@ -32,16 +32,25 @@
       {% if messages %}
         <div class="flash-list">
           {% for message in messages %}
-            <div class="flash-message flash-{{ message.tags|default:'info' }}">{{ message }}</div>
+            <div class="flash-message flash-{{ message.tags|default:'info' }} is-dismissible">
+              <span class="notice-text">{{ message }}</span>
+              <button type="button" class="notice-close" aria-label="Dismiss notification">&times;</button>
+            </div>
           {% endfor %}
         </div>
       {% endif %}
 
       {% if post_success is not None %}
         {% if post_success %}
-          <div id="processingStatus" class="processing-status" style="display:block">Upload successful: {{ saved_file }}</div>
+          <div id="processingStatus" class="processing-status is-dismissible" style="display:block">
+            <span class="notice-text">Upload successful: {{ saved_file }}</span>
+            <button type="button" class="notice-close" aria-label="Dismiss notification">&times;</button>
+          </div>
         {% else %}
-          <div id="processingStatus" class="processing-status error" style="display:block">{{ error }}</div>
+          <div id="processingStatus" class="processing-status error is-dismissible" style="display:block">
+            <span class="notice-text">{{ error }}</span>
+            <button type="button" class="notice-close" aria-label="Dismiss notification">&times;</button>
+          </div>
         {% endif %}
       {% endif %}
     </section>
@@ -49,108 +58,407 @@
 
   <div class="container">
     <div class="output-panel glass">
-      <div class="category-browser" id="categoryBrowser">
+      <div class="output-scroll">
+        <div class="type-browser-tools">
+          <label class="visually-hidden" for="typeSearchInput">Search Tree</label>
+          <input
+            type="search"
+            id="typeSearchInput"
+            class="type-search-input"
+            placeholder="Search tree..."
+            autocomplete="off"
+          >
+        </div>
+
+        <div class="hierarchy-path-bar" id="hierarchyPathBar" aria-live="polite"></div>
+
         {% for category_name, subcats in kb.items %}
-          <button type="button" class="category-chip" data-target="{{ category_name|escapejs }}">
-            <span class="category-chip-name">{{ category_name }}</span>
-            <span class="category-chip-count">{{ subcats|length }}</span>
-          </button>
-        {% endfor %}
-      </div>
+          <div class="category" data-category-name="{{ category_name|escapejs }}">
+            <div class="category-header">
+              <span class="category-title">
+                {{ category_name }}
+                <span class="category-type-count">{{ subcats|length }}</span>
+              </span>
+              <div class="category-actions no-collapse">
+                <details class="action-menu no-collapse">
+                  <summary
+                    class="action-menu-trigger no-collapse"
+                    aria-label="Type settings for {{ category_name }}"
+                    title="Type settings: redo summaries, rename, color, remove"
+                  >
+                    <span class="action-menu-icon" aria-hidden="true">&#9881;</span>
+                  </summary>
+                  <div class="action-menu-panel">
+                    <form method="post" action="{% url 'redo_category_summary' %}" class="inline-action-form no-collapse">
+                      {% csrf_token %}
+                      <input type="hidden" name="category" value="{{ category_name }}">
+                      <button
+                        type="submit"
+                        class="ghost-btn small action-menu-item redo-action-btn redo-category-btn no-collapse"
+                        data-base-label="Redo Category (Full)"
+                      >
+                        Redo Category (Full)
+                      </button>
+                    </form>
+                    <form method="post" action="{% url 'rename_category' %}" class="inline-action-form block-action-form no-collapse">
+                      {% csrf_token %}
+                      <input type="hidden" name="machine_type" value="{{ category_name }}">
+                      <input
+                        type="text"
+                        name="new_machine_type"
+                        class="action-field no-collapse"
+                        value="{{ category_name }}"
+                        placeholder="New category name"
+                        required
+                      >
+                      <button type="submit" class="ghost-btn small action-menu-item no-collapse">Rename Category</button>
+                    </form>
+                    <form method="post" action="{% url 'set_machine_type_color' %}" class="inline-action-form block-action-form no-collapse">
+                      {% csrf_token %}
+                      <input type="hidden" name="machine_type" value="{{ category_name }}">
+                      <label class="action-label no-collapse">
+                        Category Color
+                        <input
+                          type="color"
+                          name="color_hex"
+                          class="action-color-input no-collapse js-type-color-input"
+                          data-machine-type="{{ category_name|escapejs }}"
+                          value="#3A78F2"
+                        >
+                      </label>
+                      <button type="submit" class="ghost-btn small action-menu-item no-collapse">Save Category Color</button>
+                    </form>
+                    <form
+                      method="post"
+                      action="{% url 'remove_category' %}"
+                      class="inline-action-form no-collapse confirm-destructive-form"
+                      data-confirm-message="Remove category {{ category_name|escapejs }} and delete all files + related data in it?"
+                    >
+                      {% csrf_token %}
+                      <input type="hidden" name="machine_type" value="{{ category_name }}">
+                      <input type="hidden" name="confirm_delete" value="no">
+                      <button type="submit" class="ghost-btn small action-menu-item action-menu-item-remove no-collapse">Remove Category</button>
+                    </form>
+                  </div>
+                </details>
+              </div>
+            </div>
 
-      {% for category_name, subcats in kb.items %}
-        <div class="category" data-category-name="{{ category_name|escapejs }}">
-          <div class="category-header">{{ category_name }}</div>
-
-          <div class="category-content" style="display: none">
-            {% for subcat_name, subcat_obj in subcats.items %}
-              <div class="subcategory">
-                <div class="subcategory-header">
-                  <span class="subcategory-title">{{ subcat_name }}</span>
-                  {% if subcat_obj.summary or subcat_obj.summary_sections or subcat_obj.windows %}
-                    <div class="summary-toggle" role="tablist" aria-label="Summary content">
-                      <button type="button" class="summary-toggle-btn is-active" data-pane="summary">AI Summary</button>
-                      {% if subcat_obj.windows %}
-                        <button type="button" class="summary-toggle-btn" data-pane="snippets">
-                          View Snippets
-                          <span class="view-snippets-count">{{ subcat_obj.windows|length }}</span>
-                        </button>
+            <div class="category-content" style="display: none">
+              {% for subcat_name, subcat_obj in subcats.items %}
+                <div
+                  class="subcategory"
+                  data-machine-name="{{ subcat_obj.machine_name|default:subcat_name|escapejs }}"
+                  data-machine-type="{{ subcat_obj.machine_type|default:category_name|escapejs }}"
+                  data-cluster-name="{{ subcat_obj.cluster_name|default:subcat_name|escapejs }}"
+                  data-hierarchy-path="{% for part in subcat_obj.hierarchy_path %}{{ part|escapejs }}{% if not forloop.last %}||{% endif %}{% endfor %}"
+                >
+                  <div class="subcategory-header">
+                    <span class="subcategory-title">
+                      {{ subcat_obj.cluster_name|default:subcat_name }}
+                      {% if subcat_obj.needs_resummary %}
+                        <span
+                          class="stale-pill"
+                          data-stale-count="{{ subcat_obj.stale_deleted_count|default:0 }}"
+                          title="This summary includes deleted files. Redo summary to refresh."
+                        >
+                          +{{ subcat_obj.stale_deleted_count|default:0 }}
+                        </span>
                       {% endif %}
-                    </div>
-                  {% endif %}
-                </div>
+                    </span>
 
-                <div class="subcategory-content" style="display: none">
-                  {% if subcat_obj.summary or subcat_obj.summary_sections or subcat_obj.windows %}
-                    <div class="summary-card">
-                      <div class="summary-pane summary-pane-summary is-active">
-                        {% if subcat_obj.summary_sections %}
-                          <div class="summary-sections">
-                            {% for section in subcat_obj.summary_sections %}
-                              <article class="summary-section">
-                                <h4>{{ section.title }}</h4>
-                                <p>{{ section.body|linebreaksbr }}</p>
-                              </article>
-                            {% endfor %}
-                          </div>
-                        {% elif subcat_obj.summary %}
-                          <article class="summary-section">
-                            <h4>Overview</h4>
-                            <p>{{ subcat_obj.summary|linebreaksbr }}</p>
-                          </article>
-                        {% else %}
-                          <p class="hint-text">No summary available yet.</p>
-                        {% endif %}
-                      </div>
-
-                      {% if subcat_obj.windows %}
-                        <div class="summary-pane summary-pane-snippets" hidden>
-                          <div class="summary-snippet-list">
-                            {% for w in subcat_obj.windows %}
-                              <div
-                                class="snippet-item"
-                                data-category="{{ category_name|escapejs }}"
-                                data-file="{{ w.source_file|escapejs }}"
-                                data-snippet="{{ w.text|escapejs }}"
-                                data-start="{{ w.start|default_if_none:'' }}"
-                                data-end="{{ w.end|default_if_none:'' }}"
+                    <div class="subcategory-actions no-collapse">
+                      {% if subcat_obj.cluster_id %}
+                        <details class="action-menu no-collapse">
+                          <summary
+                            class="action-menu-trigger no-collapse"
+                            aria-label="Undercategory settings for {{ subcat_obj.cluster_name|default:subcat_name }}"
+                            title="Undercategory settings: redo, rename, move snippets, color, remove"
+                          >
+                            <span class="action-menu-icon" aria-hidden="true">&#9881;</span>
+                          </summary>
+                          <div class="action-menu-panel">
+                            <form
+                              method="post"
+                              action="{% url 'redo_cluster_summary' subcat_obj.cluster_id %}"
+                              class="inline-action-form no-collapse"
+                            >
+                              {% csrf_token %}
+                              <button
+                                type="submit"
+                                class="ghost-btn small action-menu-item redo-action-btn redo-cluster-btn no-collapse"
+                                data-stale-count="{{ subcat_obj.stale_deleted_count|default:0 }}"
+                                data-stale-files="{% for stale_file in subcat_obj.stale_deleted_files %}{{ stale_file|escapejs }}{% if not forloop.last %}||{% endif %}{% endfor %}"
+                                data-base-label="Redo Summary (Full)"
                               >
-                                <div class="snippet-meta">
-                                  {{ w.source_file }} &middot; {{ w.author }} &middot; {{ w.date }}
-                                </div>
-
-                                <div class="snippet-text">{{ w.text }}</div>
-
-                                <div class="snippet-links">
-                                  <a
-                                    href="#"
-                                    class="audio-link"
-                                    data-category="{{ category_name|escapejs }}"
-                                    data-file="{{ w.source_file|escapejs }}"
-                                  >
-                                    Play {{ w.source_file }}
-                                  </a>
-
-                                  {% if w.start is not None and w.end is not None %}
-                                    <span class="time-badge">
-                                      {{ w.start|floatformat:1 }}s - {{ w.end|floatformat:1 }}s
-                                    </span>
+                                Redo Summary (Full)
+                              </button>
+                            </form>
+                            <form
+                              method="post"
+                              action="{% url 'rename_cluster' subcat_obj.cluster_id %}"
+                              class="inline-action-form block-action-form no-collapse"
+                            >
+                              {% csrf_token %}
+                              <input
+                                type="text"
+                                name="new_cluster_name"
+                                class="action-field no-collapse"
+                                value="{{ subcat_obj.cluster_name|default:subcat_name }}"
+                                placeholder="New undercategory name"
+                                required
+                              >
+                              <button type="submit" class="ghost-btn small action-menu-item no-collapse">Rename Undercategory</button>
+                            </form>
+                            <form
+                              method="post"
+                              action="{% url 'merge_cluster' subcat_obj.cluster_id %}"
+                              class="inline-action-form block-action-form no-collapse"
+                            >
+                              {% csrf_token %}
+                              <select name="target_cluster_id" class="action-field no-collapse">
+                                <option value="">Move all snippets to...</option>
+                                {% for option_name, option_obj in subcats.items %}
+                                  {% if option_obj.cluster_id and option_obj.cluster_id != subcat_obj.cluster_id %}
+                                    <option value="{{ option_obj.cluster_id }}">{{ option_obj.cluster_name|default:option_name }}</option>
                                   {% endif %}
-                                </div>
-                              </div>
-                            {% endfor %}
+                                {% endfor %}
+                              </select>
+                              <button type="submit" class="ghost-btn small action-menu-item no-collapse">Move All Snippets</button>
+                            </form>
+                            <form
+                              method="post"
+                              action="{% url 'merge_cluster' subcat_obj.cluster_id %}"
+                              class="inline-action-form block-action-form no-collapse"
+                            >
+                              {% csrf_token %}
+                              <input
+                                type="text"
+                                name="new_cluster_name"
+                                class="action-field no-collapse"
+                                placeholder="New undercategory for all snippets"
+                              >
+                              <button type="submit" class="ghost-btn small action-menu-item no-collapse">Move All To New</button>
+                            </form>
+                            <form
+                              method="post"
+                              action="{% url 'merge_cluster' subcat_obj.cluster_id %}"
+                              class="inline-action-form no-collapse"
+                            >
+                              {% csrf_token %}
+                              <input type="hidden" name="force_uncategorized" value="1">
+                              <button type="submit" class="ghost-btn small action-menu-item no-collapse">Move All To Uncategorized</button>
+                            </form>
+                            <form
+                              method="post"
+                              action="{% url 'set_machine_color' %}"
+                              class="inline-action-form block-action-form no-collapse"
+                            >
+                              {% csrf_token %}
+                              <input type="hidden" name="machine_name" value="{{ subcat_obj.machine_name|default:subcat_name }}">
+                              <label class="action-label no-collapse">
+                                Machine Color
+                                <input
+                                  type="color"
+                                  name="color_hex"
+                                  class="action-color-input no-collapse js-machine-color-input"
+                                  data-machine-name="{{ subcat_obj.machine_name|default:subcat_name|escapejs }}"
+                                  data-machine-type="{{ subcat_obj.machine_type|default:category_name|escapejs }}"
+                                  value="#3A78F2"
+                                >
+                              </label>
+                              <button type="submit" class="ghost-btn small action-menu-item no-collapse">Save Machine Color</button>
+                            </form>
+                            <form
+                              method="post"
+                              action="{% url 'remove_cluster' subcat_obj.cluster_id %}"
+                              class="inline-action-form no-collapse confirm-destructive-form"
+                              data-confirm-message="Remove undercategory {{ subcat_name|escapejs }}? This removes this summary and snippet group."
+                            >
+                              {% csrf_token %}
+                              <input type="hidden" name="confirm_delete" value="no">
+                              <button type="submit" class="ghost-btn small action-menu-item action-menu-item-remove no-collapse">Remove Undercategory</button>
+                            </form>
                           </div>
+                        </details>
+                      {% endif %}
+
+                      {% if subcat_obj.summary or subcat_obj.summary_sections or subcat_obj.windows %}
+                        <div class="summary-toggle" role="tablist" aria-label="Summary content">
+                          <button type="button" class="summary-toggle-btn is-active" data-pane="summary">AI Summary</button>
+                          {% if subcat_obj.windows %}
+                            <button type="button" class="summary-toggle-btn" data-pane="snippets">
+                              View Snippets
+                              <span class="view-snippets-count">{{ subcat_obj.windows|length }}</span>
+                            </button>
+                          {% endif %}
                         </div>
                       {% endif %}
                     </div>
-                  {% endif %}
+                  </div>
 
+                  <div class="subcategory-content" style="display: none">
+                    {% if subcat_obj.summary or subcat_obj.summary_sections or subcat_obj.windows %}
+                      <div class="summary-card">
+                        {% if subcat_obj.needs_resummary %}
+                          <div class="stale-summary-note">
+                            This summary may include deleted data (+{{ subcat_obj.stale_deleted_count|default:0 }}).
+                            {% if subcat_obj.stale_deleted_files %}
+                              Deleted files:
+                              {% for stale_file in subcat_obj.stale_deleted_files %}
+                                {{ stale_file }}{% if not forloop.last %}, {% endif %}
+                              {% endfor %}.
+                            {% endif %}
+                          </div>
+                        {% endif %}
+
+                        <div class="summary-pane summary-pane-summary is-active">
+                          {% if subcat_obj.summary_sections %}
+                            <div class="summary-sections">
+                              {% for section in subcat_obj.summary_sections %}
+                                <article class="summary-section">
+                                  <h4>{{ section.title }}</h4>
+                                  <p>{{ section.body|linebreaksbr }}</p>
+                                </article>
+                              {% endfor %}
+                            </div>
+                          {% elif subcat_obj.summary %}
+                            <article class="summary-section">
+                              <h4>Overview</h4>
+                              <p>{{ subcat_obj.summary|linebreaksbr }}</p>
+                            </article>
+                          {% else %}
+                            <p class="hint-text">No summary available yet.</p>
+                          {% endif %}
+                        </div>
+
+                        {% if subcat_obj.windows %}
+                          <div class="summary-pane summary-pane-snippets" hidden>
+                            <div class="summary-snippet-list">
+                              {% for w in subcat_obj.windows %}
+                                <div
+                                  class="snippet-item"
+                                  data-category="{{ category_name|escapejs }}"
+                                  data-file="{{ w.source_file|escapejs }}"
+                                  data-segment-id="{{ w.segment_id|default_if_none:'' }}"
+                                  data-machine-type="{{ w.machine_type|default:''|escapejs }}"
+                                  data-machine-name="{{ w.machine_name|default:''|escapejs }}"
+                                  data-snippet="{{ w.text|escapejs }}"
+                                  data-start="{{ w.start|default_if_none:'' }}"
+                                  data-end="{{ w.end|default_if_none:'' }}"
+                                >
+                                  <div class="snippet-header">
+                                    <div class="snippet-meta">
+                                      {{ w.machine_type|default:category_name }}
+                                      {% if w.machine_name %} &middot; {{ w.machine_name }}{% endif %}
+                                      &middot; {{ w.source_file }}
+                                      {% if w.author %} &middot; {{ w.author }}{% endif %}
+                                      &middot; {{ w.date }}
+                                    </div>
+
+                                    {% if w.segment_id %}
+                                      <div class="snippet-actions no-collapse">
+                                        <details class="action-menu no-collapse">
+                                          <summary
+                                            class="action-menu-trigger no-collapse"
+                                            aria-label="Snippet settings"
+                                            title="Snippet settings: move or delete this snippet"
+                                          >
+                                            <span class="action-menu-icon" aria-hidden="true">&#9881;</span>
+                                          </summary>
+                                          <div class="action-menu-panel action-menu-panel-wide">
+                                            <form
+                                              method="post"
+                                              action="{% url 'move_segment' w.segment_id %}"
+                                              class="inline-action-form block-action-form no-collapse"
+                                            >
+                                              {% csrf_token %}
+                                              <select name="target_cluster_id" class="action-field no-collapse">
+                                                <option value="">Move snippet to...</option>
+                                                {% for option_name, option_obj in subcats.items %}
+                                                  {% if option_obj.cluster_id and option_obj.cluster_id != subcat_obj.cluster_id %}
+                                                    <option value="{{ option_obj.cluster_id }}">{{ option_obj.cluster_name|default:option_name }}</option>
+                                                  {% endif %}
+                                                {% endfor %}
+                                              </select>
+                                              <button type="submit" class="ghost-btn small action-menu-item no-collapse">Move Snippet</button>
+                                            </form>
+                                            <form
+                                              method="post"
+                                              action="{% url 'move_segment' w.segment_id %}"
+                                              class="inline-action-form block-action-form no-collapse"
+                                            >
+                                              {% csrf_token %}
+                                              <input
+                                                type="text"
+                                                name="new_cluster_name"
+                                                class="action-field no-collapse"
+                                                placeholder="New undercategory name"
+                                              >
+                                              <button type="submit" class="ghost-btn small action-menu-item no-collapse">Move To New Undercategory</button>
+                                            </form>
+                                            <form
+                                              method="post"
+                                              action="{% url 'move_segment' w.segment_id %}"
+                                              class="inline-action-form no-collapse"
+                                            >
+                                              {% csrf_token %}
+                                              <input type="hidden" name="force_uncategorized" value="1">
+                                              <button type="submit" class="ghost-btn small action-menu-item no-collapse">Move To Uncategorized</button>
+                                            </form>
+                                            <form
+                                              method="post"
+                                              action="{% url 'delete_segment' w.segment_id %}"
+                                              class="inline-action-form no-collapse confirm-destructive-form"
+                                              data-confirm-message="Delete this snippet and remove it from all summaries?"
+                                            >
+                                              {% csrf_token %}
+                                              <input type="hidden" name="confirm_delete" value="no">
+                                              <button type="submit" class="ghost-btn small action-menu-item action-menu-item-remove no-collapse">Delete Snippet</button>
+                                            </form>
+                                          </div>
+                                        </details>
+                                      </div>
+                                    {% endif %}
+                                  </div>
+
+                                  <div class="snippet-text">{{ w.text }}</div>
+
+                                  <div class="snippet-links">
+                                    <a
+                                      href="#"
+                                      class="audio-link"
+                                      data-category="{{ category_name|escapejs }}"
+                                      data-file="{{ w.source_file|escapejs }}"
+                                    >
+                                      Play {{ w.source_file }}
+                                    </a>
+
+                                    {% if w.start is not None and w.end is not None %}
+                                      <span
+                                        class="time-badge"
+                                        data-start="{{ w.start|default_if_none:'' }}"
+                                        data-end="{{ w.end|default_if_none:'' }}"
+                                      >
+                                        {{ w.start|floatformat:1 }}s - {{ w.end|floatformat:1 }}s
+                                      </span>
+                                    {% endif %}
+                                  </div>
+                                </div>
+                              {% endfor %}
+                            </div>
+                          </div>
+                        {% endif %}
+                      </div>
+                    {% endif %}
+
+                  </div>
                 </div>
-              </div>
-            {% endfor %}
+              {% endfor %}
+            </div>
           </div>
-        </div>
-      {% endfor %}
+        {% endfor %}
+      </div>
     </div>
 
     <div
@@ -164,18 +472,16 @@
 
     <div class="text-panel glass">
       <div class="insight-header-row">
-        <h2>Audio Insight</h2>
+        <div class="insight-meta">
+          <h2 id="insightTitle">No Audio Selected</h2>
+          <div class="about-content" id="aboutContent">Select a snippet to load details.</div>
+        </div>
         <div class="audio-player audio-player-inline">
           <audio id="audioPlayer" controls preload="metadata" style="width: 100%;">
             Your browser does not support the audio element.
           </audio>
           <div class="audio-time" id="audioTime"></div>
         </div>
-      </div>
-
-      <div class="about-section">
-        <div class="about-label">Current Selection</div>
-        <div class="about-content" id="aboutContent">Click a snippet to load transcript and audio context.</div>
       </div>
 
       <div class="transcript-scroll-container">
@@ -189,7 +495,7 @@
   <div id="uploadBackdrop" class="modal-backdrop" hidden></div>
   <aside id="uploadModal" class="upload-modal glass" aria-hidden="true">
     <div class="upload-modal-header">
-      <h3>Add New Audio</h3>
+      <h3>Upload Recording</h3>
       <button type="button" id="closeUploadModalBtn" class="ghost-btn small">Close</button>
     </div>
 
@@ -201,8 +507,41 @@
       </div>
 
       <div class="form-group">
-        <label for="category">Category</label>
-        <input type="text" id="category" name="category" placeholder="Enter machine/category" value="{{ category_submitted|default:'' }}" required />
+        <label for="machineType">Type (Asset Family)</label>
+        <input
+          type="text"
+          id="machineType"
+          name="machine_type"
+          list="machineTypeOptions"
+          placeholder="Write a new type or choose existing"
+          value="{{ machine_type_submitted|default:'' }}"
+          required
+        />
+      </div>
+
+      <div class="form-group">
+        <label for="machineName">Machine Name</label>
+        <input
+          type="text"
+          id="machineName"
+          name="machine_name"
+          list="machineNameOptions"
+          placeholder="Write a machine name or choose existing"
+          data-selected="{{ machine_name_submitted|default:''|escapejs }}"
+          value="{{ machine_name_submitted|default:'' }}"
+          required
+        />
+      </div>
+
+      <div class="form-group">
+        <label for="extraTags">Extra Tags (Optional)</label>
+        <input
+          type="text"
+          id="extraTags"
+          name="extra_tags"
+          placeholder="comma,separated,tags"
+          value="{{ extra_tags_submitted|default:'' }}"
+        />
       </div>
 
       <div class="form-group">
@@ -214,53 +553,100 @@
         <button class="submit-btn" type="submit">Process Audio</button>
       </div>
     </form>
+
+    <datalist id="machineTypeOptions">
+      {% for machine_type in machine_type_options %}
+        <option value="{{ machine_type }}"></option>
+      {% endfor %}
+    </datalist>
+
+    <datalist id="machineNameOptions">
+      {% for machine_name in machine_name_options %}
+        <option value="{{ machine_name }}"></option>
+      {% endfor %}
+    </datalist>
   </aside>
 
   <div id="libraryBackdrop" class="library-backdrop" hidden></div>
   <aside id="libraryPanel" class="library-panel glass" aria-hidden="true">
     <div class="library-header">
-      <h3>Audio Navigator</h3>
+      <h3>Audio Library</h3>
       <button type="button" id="closeLibraryBtn" class="ghost-btn small">Close</button>
     </div>
-    <div class="library-list" id="libraryList">
-      {% if uploads %}
-        {% for upload in uploads %}
-          <div class="library-row">
-            <button
-              type="button"
-              class="library-item"
-              data-file="{{ upload.audio_file|escapejs }}"
-              data-category="{{ upload.category|escapejs }}"
-              data-author="{{ upload.author|default:''|escapejs }}"
-            >
-              <span class="library-file">{{ upload.audio_file }}</span>
-              <span class="library-meta">{{ upload.category }}{% if upload.author %} &middot; {{ upload.author }}{% endif %} &middot; {{ upload.date }}</span>
-            </button>
-            <form
-              method="post"
-              action="{% url 'delete_upload' upload.id %}"
-              class="library-delete-form"
-              onsubmit="return confirm('Delete {{ upload.audio_file|escapejs }} and all related data?');"
-            >
-              {% csrf_token %}
-              <button type="submit" class="danger-btn small">Delete</button>
-            </form>
-          </div>
-        {% endfor %}
-      {% else %}
-        <p class="hint-text">No files indexed yet.</p>
-      {% endif %}
-    </div>
+    <form method="post" action="{% url 'bulk_delete_uploads' %}" id="bulkDeleteForm" class="library-bulk-form">
+      {% csrf_token %}
+      <input type="hidden" id="keepSummariesInput" name="keep_summaries" value="1">
+      <input type="hidden" id="bulkDeleteConfirmInput" name="confirm_delete" value="no">
+      <div class="library-bulk-controls">
+        <label class="library-keep-toggle">
+          <input type="checkbox" id="keepSummariesToggle" checked>
+          Keep current summaries and mark stale
+        </label>
+        <button type="submit" id="bulkDeleteBtn" class="danger-btn small" disabled>Delete Selected</button>
+      </div>
+      <p class="library-delete-hint">
+        Delete removes the audio file and all data related to file: transcript segments, cluster links, and metadata.
+      </p>
+
+      <div class="library-list" id="libraryList">
+        {% if uploads %}
+          {% for upload in uploads %}
+            <div class="library-row">
+              <label class="library-select">
+                <input
+                  type="checkbox"
+                  class="library-delete-check"
+                  name="upload_ids"
+                  value="{{ upload.id }}"
+                  data-file="{{ upload.audio_file|escapejs }}"
+                  data-machine-type="{{ upload.machine_type|default:''|escapejs }}"
+                  data-machine-name="{{ upload.machine_name|default:''|escapejs }}"
+                  data-category="{{ upload.category|escapejs }}"
+                >
+              </label>
+
+              <button
+                type="button"
+                class="library-item"
+                data-file="{{ upload.audio_file|escapejs }}"
+                data-category="{{ upload.machine_type|default:upload.category|escapejs }}"
+                data-machine-type="{{ upload.machine_type|default:''|escapejs }}"
+                data-machine-name="{{ upload.machine_name|default:''|escapejs }}"
+                data-author="{{ upload.author|default:''|escapejs }}"
+              >
+                <span class="library-file">{{ upload.audio_file }}</span>
+                <span class="library-meta">
+                  {{ upload.machine_type|default:'Unassigned' }} &middot; {{ upload.machine_name|default:upload.category }}
+                  {% if upload.author %} &middot; {{ upload.author }}{% endif %}
+                  &middot; {{ upload.date }}
+                </span>
+                <span class="library-meta library-meta-secondary">
+                  Cluster bucket: {{ upload.category }}
+                </span>
+              </button>
+            </div>
+          {% endfor %}
+        {% else %}
+          <p class="hint-text">No files indexed yet.</p>
+        {% endif %}
+      </div>
+    </form>
   </aside>
 
   {{ meta|json_script:"kb-meta" }}
   {{ uploads|json_script:"kb-uploads" }}
+  {{ machine_catalog|json_script:"machine-catalog" }}
+  {{ styles|json_script:"kb-styles" }}
 
   <script>
     const metaEl = document.getElementById("kb-meta");
     const uploadsEl = document.getElementById("kb-uploads");
+    const machineCatalogEl = document.getElementById("machine-catalog");
+    const stylesEl = document.getElementById("kb-styles");
     const META = metaEl ? JSON.parse(metaEl.textContent) : {};
     const UPLOADS = uploadsEl ? JSON.parse(uploadsEl.textContent) : [];
+    const MACHINE_CATALOG = machineCatalogEl ? JSON.parse(machineCatalogEl.textContent) : {};
+    const STYLES = stylesEl ? JSON.parse(stylesEl.textContent) : {};
     const AUDIO_BLOB_CACHE = new Map();
 
     function escapeHtml(str) {
@@ -290,37 +676,93 @@
       return Number.isNaN(number) ? null : number;
     }
 
-    function highlightFirstMatch(sourceText, rawNeedle, markClass) {
-      const source = sourceText || "";
-      const needle = (rawNeedle || "").trim();
-      if (!needle) {
-        return { html: escapeHtml(source), hasMatch: false };
+    function parseMaybeInt(value) {
+      if (value === "" || value == null) return null;
+      const number = Number.parseInt(value, 10);
+      return Number.isNaN(number) ? null : number;
+    }
+
+    function formatSnippetTimeBadges() {
+      document.querySelectorAll(".time-badge").forEach(badge => {
+        const start = parseMaybeFloat(badge.dataset.start);
+        const end = parseMaybeFloat(badge.dataset.end);
+        if (start == null || end == null) return;
+        badge.textContent = `${formatTime(start)} - ${formatTime(end)}`;
+      });
+    }
+
+    function parseHierarchyPathFromData(raw) {
+      return String(raw || "")
+        .split("||")
+        .map(value => value.trim())
+        .filter(Boolean);
+    }
+
+    function normalizeHexColor(value, fallback = "#3A78F2") {
+      const raw = String(value || "").trim();
+      if (!raw) return fallback;
+      let text = raw.startsWith("#") ? raw.slice(1) : raw;
+      if (text.length === 3) {
+        text = text.split("").map(char => `${char}${char}`).join("");
       }
+      if (!/^[0-9a-fA-F]{6}$/.test(text)) return fallback;
+      return `#${text.toUpperCase()}`;
+    }
 
-      const lowerSource = source.toLowerCase();
-      let lowerNeedle = needle.toLowerCase();
-      let index = lowerSource.indexOf(lowerNeedle);
+    function hexToRgbString(hexColor) {
+      const normalized = normalizeHexColor(hexColor, "#3A78F2");
+      const value = normalized.slice(1);
+      const r = Number.parseInt(value.slice(0, 2), 16);
+      const g = Number.parseInt(value.slice(2, 4), 16);
+      const b = Number.parseInt(value.slice(4, 6), 16);
+      return `${r}, ${g}, ${b}`;
+    }
 
-      if (index === -1) {
-        const fallbackNeedle = lowerNeedle.slice(0, Math.min(42, lowerNeedle.length)).trim();
-        if (!fallbackNeedle) {
-          return { html: escapeHtml(source), hasMatch: false };
-        }
-        lowerNeedle = fallbackNeedle;
-        index = lowerSource.indexOf(lowerNeedle);
-      }
+    function getTypeColor(machineType) {
+      const styles = STYLES?.machine_types || {};
+      return normalizeHexColor(styles[machineType], "#3A78F2");
+    }
 
-      if (index === -1) {
-        return { html: escapeHtml(source), hasMatch: false };
-      }
+    function getMachineColor(machineName, machineType) {
+      const machineStyles = STYLES?.machines || {};
+      const machineColor = normalizeHexColor(machineStyles[machineName], "");
+      if (machineColor) return machineColor;
+      return getTypeColor(machineType);
+    }
 
-      const before = escapeHtml(source.slice(0, index));
-      const match = escapeHtml(source.slice(index, index + lowerNeedle.length));
-      const after = escapeHtml(source.slice(index + lowerNeedle.length));
-      return {
-        html: `${before}<mark class="${markClass}">${match}</mark>${after}`,
-        hasMatch: true,
-      };
+    function applySavedTaxonomyColors() {
+      document.querySelectorAll(".category-chip[data-target]").forEach(chip => {
+        const machineType = String(chip.dataset.target || "").trim();
+        const color = getTypeColor(machineType);
+        chip.style.setProperty("--type-accent", color);
+        chip.style.setProperty("--type-accent-rgb", hexToRgbString(color));
+      });
+
+      document.querySelectorAll(".category[data-category-name]").forEach(category => {
+        const machineType = String(category.dataset.categoryName || "").trim();
+        const color = getTypeColor(machineType);
+        category.style.setProperty("--type-accent", color);
+        category.style.setProperty("--type-accent-rgb", hexToRgbString(color));
+      });
+
+      document.querySelectorAll(".subcategory[data-machine-name]").forEach(subcategory => {
+        const machineName = String(subcategory.dataset.machineName || "").trim();
+        const machineType = String(subcategory.dataset.machineType || "").trim();
+        const color = getMachineColor(machineName, machineType);
+        subcategory.style.setProperty("--machine-accent", color);
+        subcategory.style.setProperty("--machine-accent-rgb", hexToRgbString(color));
+      });
+
+      document.querySelectorAll(".js-type-color-input[data-machine-type]").forEach(input => {
+        const machineType = String(input.dataset.machineType || "").trim();
+        input.value = getTypeColor(machineType);
+      });
+
+      document.querySelectorAll(".js-machine-color-input[data-machine-name]").forEach(input => {
+        const machineName = String(input.dataset.machineName || "").trim();
+        const machineType = String(input.dataset.machineType || "").trim();
+        input.value = getMachineColor(machineName, machineType);
+      });
     }
 
     function syncBodyOverlayState() {
@@ -446,8 +888,13 @@
       return null;
     }
 
-    function findBestSegmentIndex(segments, snippetText, snippetStart) {
+    function findBestSegmentIndex(segments, snippetText, snippetStart, snippetSegmentId) {
       if (!Array.isArray(segments) || segments.length === 0) return -1;
+
+      if (snippetSegmentId != null) {
+        const exactIdMatch = segments.findIndex(segment => Number(segment?.id) === snippetSegmentId);
+        if (exactIdMatch !== -1) return exactIdMatch;
+      }
 
       if (snippetStart != null) {
         let nearestIndex = -1;
@@ -472,6 +919,13 @@
 
       const snippetNormalized = normalizeForSearch(snippetText);
       if (!snippetNormalized) return -1;
+
+      for (let i = 0; i < segments.length; i += 1) {
+        const segmentText = normalizeForSearch(segments[i]?.text || "");
+        if (segmentText && segmentText === snippetNormalized) {
+          return i;
+        }
+      }
 
       for (let i = 0; i < segments.length; i += 1) {
         const segmentText = normalizeForSearch(segments[i]?.text || "");
@@ -593,30 +1047,6 @@
       return bestIndex !== -1 && bestScore >= threshold ? bestIndex : -1;
     }
 
-    function getVisibleSnippetLimit() {
-      const viewportHeight = window.innerHeight || 900;
-      if (viewportHeight >= 1200) return 6;
-      if (viewportHeight >= 940) return 5;
-      if (viewportHeight >= 760) return 4;
-      return 3;
-    }
-
-    function computeVisibleWindow(totalCount, activeIndex, maxVisible) {
-      if (!Number.isFinite(totalCount) || totalCount <= 0) {
-        return { startIndex: 0, endIndex: 0 };
-      }
-
-      const visible = Math.max(1, Math.min(maxVisible, totalCount));
-      const maxStart = Math.max(0, totalCount - visible);
-      // Keep the selected snippet at the top whenever there is enough room.
-      const preferredStart = activeIndex >= 0 ? activeIndex : 0;
-      const startIndex = Math.min(Math.max(0, preferredStart), maxStart);
-      return {
-        startIndex,
-        endIndex: startIndex + visible,
-      };
-    }
-
     function renderTranscript(entry, activeIndex, snippetText) {
       const container = document.getElementById("transcriptContent");
       if (!container) return;
@@ -632,25 +1062,17 @@
         return;
       }
 
-      const maxVisible = getVisibleSnippetLimit();
-
       if (hasSegments) {
-        const { startIndex, endIndex } = computeVisibleWindow(segments.length, activeIndex, maxVisible);
-        const visibleSegments = segments.slice(startIndex, endIndex);
-
         container.innerHTML = `
           <section class="transcript-flow">
-            ${visibleSegments.map((segment, offset) => {
-              const index = startIndex + offset;
+            ${segments.map((segment, index) => {
               const start = segment.start ?? null;
               const end = segment.end ?? null;
-              let segmentTextHtml = escapeHtml(segment.text || "");
-              if (index === activeIndex) {
-                segmentTextHtml = highlightFirstMatch(segment.text || "", snippetText, "hl").html;
-              }
+              const segmentId = segment.id ?? "";
+              const segmentTextHtml = escapeHtml(segment.text || "");
               const cssClass = index === activeIndex ? "segment active" : "segment";
               return `
-                <div class="${cssClass}" data-start="${start}">
+                <div class="${cssClass}" data-start="${start}" data-segment-id="${segmentId}">
                   <span class="seg-text">${segmentTextHtml}</span>
                   <span class="seg-time">${formatTime(start)} - ${formatTime(end)}</span>
                 </div>
@@ -661,17 +1083,11 @@
       } else {
         const chunks = splitTranscriptIntoChunks(transcriptText);
         const activeChunkIndex = findBestTextMatchIndex(chunks, snippetText);
-        const { startIndex, endIndex } = computeVisibleWindow(chunks.length, activeChunkIndex, maxVisible);
-        const visibleChunks = chunks.slice(startIndex, endIndex);
 
         container.innerHTML = `
           <section class="transcript-flow">
-            ${visibleChunks.map((chunk, offset) => {
-              const index = startIndex + offset;
-              let chunkHtml = escapeHtml(chunk || "");
-              if (index === activeChunkIndex) {
-                chunkHtml = highlightFirstMatch(chunk || "", snippetText, "hl").html;
-              }
+            ${chunks.map((chunk, index) => {
+              const chunkHtml = escapeHtml(chunk || "");
               const cssClass = index === activeChunkIndex ? "segment active" : "segment";
               return `
                 <div class="${cssClass}">
@@ -685,6 +1101,10 @@
 
       container.querySelectorAll(".segment").forEach(segmentElement => {
         segmentElement.addEventListener("click", () => {
+          const currentSelection = window.getSelection?.();
+          if (currentSelection && currentSelection.toString().trim().length > 0) {
+            return;
+          }
           const start = parseFloat(segmentElement.dataset.start);
           if (!Number.isNaN(start)) {
             seekAudio(start);
@@ -701,27 +1121,32 @@
           return;
         }
 
-        const inlineHit = container.querySelector("mark.hl");
-        if (inlineHit) {
-          scrollWithinTranscript(transcriptViewport, inlineHit);
-          return;
-        }
-
         transcriptViewport.scrollTo({ top: 0, behavior: "smooth" });
       });
     }
 
-    function updateAbout(entry, file, start, end) {
-      const about = document.getElementById("aboutContent");
-      if (!about) return;
-      const author = entry?.author || "";
-      const date = entry?.date || "";
+    function buildMetadataText(machineType, machineName, author, date) {
+      const machineLabel = [machineType || "", machineName || ""]
+        .filter(value => (value || "").trim().length > 0)
+        .join(" / ");
+      const metaParts = [machineLabel, author || "", date || ""]
+        .filter(value => (value || "").trim().length > 0);
+      return metaParts.length > 0 ? metaParts.join(" | ") : "No metadata available";
+    }
 
-      about.innerHTML = `
-        <div><strong>Filename:</strong> ${escapeHtml(file)}</div>
-        <div><strong>Author:</strong> ${escapeHtml(author)}</div>
-        <div><strong>Date:</strong> ${escapeHtml(date)}</div>
-      `;
+    function updateAbout(entry, file) {
+      const about = document.getElementById("aboutContent");
+      const title = document.getElementById("insightTitle");
+      if (title) {
+        title.textContent = file || "No Audio Selected";
+      }
+      if (!about) return;
+      about.textContent = buildMetadataText(
+        entry?.machine_type || "",
+        entry?.machine_name || "",
+        entry?.author || "",
+        entry?.date || ""
+      );
     }
 
     function openParentsForSnippet(snippetElement) {
@@ -729,6 +1154,7 @@
       const subcategory = snippetElement.closest(".subcategory");
       const categoryContent = snippetElement.closest(".category-content");
       const category = snippetElement.closest(".category");
+      const treeLeaf = snippetElement.closest(".tree-leaf");
 
       if (subcategory) {
         const snippetsToggle = subcategory.querySelector('.subcategory-header .summary-toggle-btn[data-pane="snippets"]');
@@ -739,6 +1165,13 @@
 
       if (subcategoryContent) subcategoryContent.style.display = "block";
       if (categoryContent) categoryContent.style.display = "block";
+      if (treeLeaf) treeLeaf.open = true;
+
+      let treeNode = treeLeaf ? treeLeaf.parentElement?.closest(".tree-node") : null;
+      while (treeNode) {
+        treeNode.open = true;
+        treeNode = treeNode.parentElement?.closest(".tree-node");
+      }
 
       const subcategoryHeader = subcategory ? subcategory.querySelector(".subcategory-header") : null;
       const categoryHeader = category ? category.querySelector(".category-header") : null;
@@ -763,9 +1196,17 @@
 
       const upload = (UPLOADS || []).find(item => item.audio_file === fileName);
       if (upload) {
-        const info = `Filename: ${fileName}<br>Category: ${upload.category}<br>Author: ${upload.author || ""}`;
+        const title = document.getElementById("insightTitle");
         const about = document.getElementById("aboutContent");
-        if (about) about.innerHTML = info;
+        if (title) title.textContent = fileName;
+        if (about) {
+          about.textContent = buildMetadataText(
+            upload.machine_type || "",
+            upload.machine_name || "",
+            upload.author || "",
+            upload.date || ""
+          );
+        }
       }
       return false;
     }
@@ -811,6 +1252,347 @@
       syncBodyOverlayState();
     }
 
+    function setupDismissibleNotices() {
+      document.addEventListener("click", event => {
+        const closeButton = event.target.closest(".notice-close");
+        if (!closeButton) return;
+
+        const notice = closeButton.closest(".flash-message, .processing-status");
+        if (!notice) return;
+        notice.remove();
+
+        const stack = document.querySelector(".notice-stack");
+        if (!stack) return;
+        const remaining = stack.querySelector(".flash-message, .processing-status");
+        if (!remaining) {
+          stack.remove();
+        }
+      });
+    }
+
+    function setupSubcategoryBuilder() {
+      const builder = document.getElementById("subcategoryBuilder");
+      const addButton = document.getElementById("addSubcategoryBtn");
+      const subcategoryPathsInput = document.getElementById("subcategoryPaths");
+      const hierarchyPathInput = document.getElementById("hierarchyPath");
+      const uploadForm = document.querySelector("#uploadModal .upload-form");
+      if (!builder || !subcategoryPathsInput || !uploadForm) return;
+
+      let sequence = 0;
+      let dragNodeId = null;
+
+      function createNode(label = "") {
+        sequence += 1;
+        return { id: `subcat-${sequence}`, label, children: [] };
+      }
+
+      function parseSubmittedPaths() {
+        const rawJson = (subcategoryPathsInput.value || "").trim();
+        if (rawJson) {
+          try {
+            const parsed = JSON.parse(rawJson);
+            if (Array.isArray(parsed)) return parsed;
+          } catch {
+            // Ignore invalid JSON and fallback to legacy field.
+          }
+        }
+
+        const legacy = (hierarchyPathInput?.value || "").trim();
+        if (!legacy) return [];
+        return [legacy.split(">").map(value => value.trim()).filter(Boolean)];
+      }
+
+      function normalizePathCollection(collection) {
+        if (!Array.isArray(collection)) return [];
+        const seen = new Set();
+        const normalized = [];
+        collection.forEach(path => {
+          const parts = Array.isArray(path)
+            ? path.map(value => String(value || "").trim())
+            : String(path || "").split(">").map(value => value.trim());
+          const cleaned = parts.filter(Boolean);
+          if (cleaned.length === 0) return;
+          const key = cleaned.map(value => value.toLowerCase()).join("||");
+          if (seen.has(key)) return;
+          seen.add(key);
+          normalized.push(cleaned);
+        });
+        return normalized;
+      }
+
+      function addPathToTree(roots, path) {
+        let current = roots;
+        path.forEach(part => {
+          let node = current.find(candidate => candidate.label.toLowerCase() === part.toLowerCase());
+          if (!node) {
+            node = createNode(part);
+            current.push(node);
+          }
+          current = node.children;
+        });
+      }
+
+      function buildTreeFromPaths(paths) {
+        const roots = [];
+        paths.forEach(path => addPathToTree(roots, path));
+        return roots;
+      }
+
+      const state = {
+        roots: buildTreeFromPaths(normalizePathCollection(parseSubmittedPaths())),
+      };
+
+      function collectPaths(nodes, prefix = [], output = []) {
+        nodes.forEach(node => {
+          const label = (node.label || "").trim();
+          if (!label) {
+            collectPaths(node.children || [], prefix, output);
+            return;
+          }
+          const nextPrefix = [...prefix, label];
+          output.push(nextPrefix);
+          collectPaths(node.children || [], nextPrefix, output);
+        });
+        return output;
+      }
+
+      function removeNode(nodes, targetId) {
+        for (let index = 0; index < nodes.length; index += 1) {
+          const node = nodes[index];
+          if (node.id === targetId) {
+            return nodes.splice(index, 1)[0];
+          }
+          const nested = removeNode(node.children || [], targetId);
+          if (nested) return nested;
+        }
+        return null;
+      }
+
+      function findNode(nodes, targetId) {
+        for (const node of nodes) {
+          if (node.id === targetId) return node;
+          const nested = findNode(node.children || [], targetId);
+          if (nested) return nested;
+        }
+        return null;
+      }
+
+      function nodeContainsTarget(node, targetId) {
+        if (!node) return false;
+        if (node.id === targetId) return true;
+        return (node.children || []).some(child => nodeContainsTarget(child, targetId));
+      }
+
+      function serializeIntoInputs() {
+        const paths = collectPaths(state.roots, [], []);
+        subcategoryPathsInput.value = JSON.stringify(paths);
+        if (hierarchyPathInput) {
+          hierarchyPathInput.value = paths.length > 0 ? paths[0].join(" > ") : "";
+        }
+      }
+
+      function renderNodes(nodes, container, depth = 0) {
+        nodes.forEach(node => {
+          const wrapper = document.createElement("div");
+          wrapper.className = "subcategory-node-wrap";
+          wrapper.style.setProperty("--node-depth", String(depth));
+
+          const row = document.createElement("div");
+          row.className = "subcategory-node";
+          row.draggable = true;
+          row.dataset.nodeId = node.id;
+
+          const handle = document.createElement("span");
+          handle.className = "subcategory-drag-handle";
+          handle.textContent = "⋮⋮";
+          handle.title = "Drag onto another subcategory to nest";
+
+          const input = document.createElement("input");
+          input.type = "text";
+          input.className = "subcategory-node-input";
+          input.placeholder = "Subcategory";
+          input.value = node.label || "";
+          input.addEventListener("input", () => {
+            node.label = input.value;
+            serializeIntoInputs();
+          });
+
+          const addChildButton = document.createElement("button");
+          addChildButton.type = "button";
+          addChildButton.className = "ghost-btn small subcategory-node-btn";
+          addChildButton.textContent = "+ child";
+          addChildButton.addEventListener("click", () => {
+            node.children.push(createNode(""));
+            render();
+          });
+
+          const removeButton = document.createElement("button");
+          removeButton.type = "button";
+          removeButton.className = "ghost-btn small subcategory-node-btn subcategory-node-remove";
+          removeButton.textContent = "Remove";
+          removeButton.addEventListener("click", () => {
+            removeNode(state.roots, node.id);
+            render();
+          });
+
+          row.addEventListener("dragstart", event => {
+            dragNodeId = node.id;
+            row.classList.add("is-dragging");
+            event.dataTransfer.effectAllowed = "move";
+            event.dataTransfer.setData("text/plain", node.id);
+          });
+          row.addEventListener("dragend", () => {
+            dragNodeId = null;
+            row.classList.remove("is-dragging");
+            builder.querySelectorAll(".is-drop-target").forEach(element => element.classList.remove("is-drop-target"));
+          });
+          row.addEventListener("dragover", event => {
+            if (!dragNodeId || dragNodeId === node.id) return;
+            event.preventDefault();
+            row.classList.add("is-drop-target");
+            event.dataTransfer.dropEffect = "move";
+          });
+          row.addEventListener("dragleave", () => row.classList.remove("is-drop-target"));
+          row.addEventListener("drop", event => {
+            event.preventDefault();
+            row.classList.remove("is-drop-target");
+            const draggedId = dragNodeId || event.dataTransfer.getData("text/plain");
+            if (!draggedId || draggedId === node.id) return;
+
+            const movedNode = removeNode(state.roots, draggedId);
+            if (!movedNode) return;
+            if (nodeContainsTarget(movedNode, node.id)) {
+              state.roots.push(movedNode);
+              render();
+              return;
+            }
+
+            const targetNode = findNode(state.roots, node.id);
+            if (!targetNode) {
+              state.roots.push(movedNode);
+              render();
+              return;
+            }
+            targetNode.children.push(movedNode);
+            render();
+          });
+
+          row.appendChild(handle);
+          row.appendChild(input);
+          row.appendChild(addChildButton);
+          row.appendChild(removeButton);
+          wrapper.appendChild(row);
+
+          if (node.children && node.children.length > 0) {
+            const children = document.createElement("div");
+            children.className = "subcategory-node-children";
+            renderNodes(node.children, children, depth + 1);
+            wrapper.appendChild(children);
+          }
+
+          container.appendChild(wrapper);
+        });
+      }
+
+      function render() {
+        builder.innerHTML = "";
+        const roots = state.roots || [];
+        if (roots.length === 0) {
+          const hint = document.createElement("p");
+          hint.className = "hint-text";
+          hint.textContent = "No subcategories yet. Add one to provide richer context.";
+          builder.appendChild(hint);
+          serializeIntoInputs();
+          return;
+        }
+
+        renderNodes(roots, builder, 0);
+        serializeIntoInputs();
+      }
+
+      if (addButton) {
+        addButton.addEventListener("click", () => {
+          state.roots.push(createNode(""));
+          render();
+        });
+      }
+
+      uploadForm.addEventListener("submit", () => {
+        serializeIntoInputs();
+      });
+
+      render();
+    }
+
+    function setupTaxonomyInputs() {
+      const typeInput = document.getElementById("machineType");
+      const machineInput = document.getElementById("machineName");
+      const machineList = document.getElementById("machineNameOptions");
+      if (!typeInput || !machineInput || !machineList) return;
+
+      const existingMachineOptions = Array.from(machineList.querySelectorAll("option"))
+        .map(option => option.value?.trim() || "")
+        .filter(Boolean);
+
+      const normalizedCatalog = new Map(
+        Object.entries(MACHINE_CATALOG || {}).map(([machineType, machineNames]) => [
+          String(machineType || "").trim().toLowerCase(),
+          Array.isArray(machineNames)
+            ? machineNames.map(value => String(value || "").trim()).filter(Boolean)
+            : [],
+        ])
+      );
+
+      const allMachineNames = Array.from(
+        new Set([
+          ...existingMachineOptions,
+          ...Array.from(normalizedCatalog.values()).flat(),
+        ])
+      ).sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" }));
+
+      const submittedMachine = (machineInput.dataset.selected || machineInput.value || "").trim();
+
+      function renderMachineOptions(values, preferredValue = "") {
+        const options = values.length > 0 ? values : allMachineNames;
+        machineList.innerHTML = options
+          .map(value => `<option value="${escapeHtml(value)}"></option>`)
+          .join("");
+
+        const preferred = preferredValue.trim();
+        const hasPreferred = options.some(value => value.toLowerCase() === preferred.toLowerCase());
+        if (preferred && hasPreferred) {
+          machineInput.value = options.find(value => value.toLowerCase() === preferred.toLowerCase()) || preferred;
+          return;
+        }
+
+        const current = (machineInput.value || "").trim();
+        const hasCurrent = options.some(value => value.toLowerCase() === current.toLowerCase());
+        if (current && hasCurrent) {
+          return;
+        }
+
+        if (!current && options.length > 0) {
+          machineInput.value = options[0];
+        }
+      }
+
+      function refreshForSelectedType(preferredValue = "") {
+        const selectedType = (typeInput.value || "").trim().toLowerCase();
+        const scopedOptions = normalizedCatalog.get(selectedType) || [];
+        renderMachineOptions(scopedOptions, preferredValue);
+      }
+
+      typeInput.addEventListener("input", () => {
+        refreshForSelectedType(machineInput.value || "");
+      });
+
+      machineInput.addEventListener("focus", () => {
+        refreshForSelectedType(machineInput.value || "");
+      });
+
+      refreshForSelectedType(submittedMachine);
+    }
+
     function setupLibraryPanel() {
       const panel = document.getElementById("libraryPanel");
       const backdrop = document.getElementById("libraryBackdrop");
@@ -818,6 +1600,12 @@
         document.getElementById("openLibraryBtn"),
       ].filter(Boolean);
       const closeButton = document.getElementById("closeLibraryBtn");
+      const bulkForm = document.getElementById("bulkDeleteForm");
+      const bulkDeleteButton = document.getElementById("bulkDeleteBtn");
+      const keepSummariesToggle = document.getElementById("keepSummariesToggle");
+      const keepSummariesInput = document.getElementById("keepSummariesInput");
+      const bulkDeleteConfirmInput = document.getElementById("bulkDeleteConfirmInput");
+      const deleteChecks = Array.from(document.querySelectorAll(".library-delete-check"));
 
       function openPanel() {
         if (!panel || !backdrop) return;
@@ -855,6 +1643,73 @@
         }
       });
 
+      function selectedDeleteChecks() {
+        return deleteChecks.filter(check => check.checked);
+      }
+
+      function syncBulkDeleteButton() {
+        if (!bulkDeleteButton) return;
+        const selectedCount = selectedDeleteChecks().length;
+        bulkDeleteButton.disabled = selectedCount === 0;
+        bulkDeleteButton.textContent = selectedCount > 0
+          ? `Delete Selected (${selectedCount})`
+          : "Delete Selected";
+      }
+
+      if (keepSummariesToggle && keepSummariesInput) {
+        const syncKeepMode = () => {
+          keepSummariesInput.value = keepSummariesToggle.checked ? "1" : "0";
+        };
+        keepSummariesToggle.addEventListener("change", syncKeepMode);
+        syncKeepMode();
+      }
+
+      deleteChecks.forEach(check => {
+        check.addEventListener("change", syncBulkDeleteButton);
+      });
+
+      if (bulkForm) {
+        bulkForm.addEventListener("submit", event => {
+          if (bulkDeleteConfirmInput) bulkDeleteConfirmInput.value = "no";
+          const selected = selectedDeleteChecks();
+          if (selected.length === 0) {
+            event.preventDefault();
+            return;
+          }
+
+          const details = selected.map(check => {
+            const file = check.dataset.file || "unknown-file";
+            const machineType = check.dataset.machineType || "Unassigned";
+            const machineName = check.dataset.machineName || check.dataset.category || "Unknown";
+            const bucket = check.dataset.category || machineName;
+            return `${file} (${machineType} / ${machineName} | bucket: ${bucket})`;
+          });
+          const preview = details.slice(0, 6).map(item => `- ${item}`).join("\n");
+          const more = details.length > 6 ? `\n...and ${details.length - 6} more` : "";
+          const keepSummaries = keepSummariesToggle ? keepSummariesToggle.checked : true;
+          const modeDescription = keepSummaries
+            ? "Summaries will be kept and marked stale (+N) for manual redo."
+            : "Affected summaries will be recomputed now.";
+
+          const confirmed = window.confirm(
+            `Delete ${selected.length} selected audio file(s)?\n\n`
+            + "This will delete all data related to each file:\n"
+            + "- Audio file\n"
+            + "- Transcript segments\n"
+            + "- Cluster links and file metadata\n\n"
+            + `Selected:\n${preview}${more}\n\n`
+            + modeDescription
+          );
+          if (!confirmed) {
+            event.preventDefault();
+            return;
+          }
+
+          if (bulkDeleteConfirmInput) bulkDeleteConfirmInput.value = "yes";
+        });
+      }
+
+      syncBulkDeleteButton();
       syncBodyOverlayState();
     }
 
@@ -969,46 +1824,696 @@
       });
     }
 
-    function setupCategoryBrowser() {
-      const browser = document.getElementById("categoryBrowser");
-      if (!browser) return;
-
-      const chips = Array.from(browser.querySelectorAll(".category-chip"));
+    function setupHierarchyTree() {
+      const pathBar = document.getElementById("hierarchyPathBar");
       const categoryBlocks = Array.from(document.querySelectorAll(".category[data-category-name]"));
-      if (chips.length === 0 || categoryBlocks.length === 0) return;
+      let activePathParts = [];
 
-      function applyFilter(targetCategory) {
-        chips.forEach(chip => {
-          chip.classList.toggle("is-active", chip.dataset.target === targetCategory);
-        });
+      function makePathKey(parts) {
+        return parts.map(part => String(part || "").trim().toLowerCase()).join("||");
+      }
 
-        categoryBlocks.forEach(block => {
-          const blockCategory = block.dataset.categoryName || "";
-          const visible = blockCategory === targetCategory;
-          block.style.display = visible ? "" : "none";
-
-          if (visible) {
-            const header = block.querySelector(".category-header");
-            const content = block.querySelector(".category-content");
-            if (content) content.style.display = "block";
-            if (header) header.classList.remove("collapsed");
+      function closeSiblingDetails(detailsElement) {
+        const parent = detailsElement?.parentElement;
+        if (!parent) return;
+        Array.from(parent.children).forEach(sibling => {
+          if (sibling === detailsElement) return;
+          if (sibling.classList?.contains("tree-node") || sibling.classList?.contains("tree-leaf")) {
+            sibling.open = false;
           }
         });
       }
 
-      chips.forEach(chip => {
-        chip.addEventListener("click", () => {
-          applyFilter(chip.dataset.target || "");
+      function ensureSubcategoryVisible(targetElement) {
+        if (!targetElement) return;
+        const subcategory = targetElement.classList?.contains("subcategory")
+          ? targetElement
+          : targetElement.querySelector(".subcategory");
+        if (!subcategory) return;
+
+        const subcategoryHeader = subcategory.querySelector(".subcategory-header");
+        const subcategoryContent = subcategory.querySelector(".subcategory-content");
+        if (subcategoryContent) subcategoryContent.style.display = "block";
+        if (subcategoryHeader) subcategoryHeader.classList.remove("collapsed");
+      }
+
+      function openPathKey(pathKey) {
+        if (!pathKey) return;
+        const activeCategoryName = activePathParts[0] || "";
+        if (!activeCategoryName) return;
+
+        const activeCategory = categoryBlocks.find(block => (block.dataset.categoryName || "") === activeCategoryName);
+        if (!activeCategory) return;
+
+        const target = Array.from(activeCategory.querySelectorAll("[data-path-key]"))
+          .find(element => (element.dataset.pathKey || "") === pathKey);
+        if (!target) return;
+
+        let current = target;
+        while (current && current !== activeCategory) {
+          if (current.tagName === "DETAILS") {
+            current.open = true;
+            closeSiblingDetails(current);
+          }
+          current = current.parentElement?.closest("details, .category, .subcategory");
+        }
+
+        ensureSubcategoryVisible(target);
+      }
+
+      function renderPathBar() {
+        if (!pathBar) return;
+        const parts = activePathParts.filter(Boolean);
+        if (parts.length === 0) {
+          pathBar.innerHTML = `<span class="hierarchy-path-empty">Path: choose a node to navigate.</span>`;
+          return;
+        }
+
+        const fragments = parts.map((part, index) => {
+          const partial = parts.slice(0, index + 1);
+          const pathKey = makePathKey(partial);
+          const isActive = index === parts.length - 1;
+          return `
+            <button
+              type="button"
+              class="hierarchy-path-btn ${isActive ? "is-active" : ""}"
+              data-path-index="${index}"
+              data-path-key="${escapeHtml(pathKey)}"
+            >${escapeHtml(part)}</button>
+          `;
+        });
+
+        pathBar.innerHTML = fragments.join('<span class="hierarchy-path-sep">/</span>');
+        pathBar.querySelectorAll(".hierarchy-path-btn").forEach(button => {
+          button.addEventListener("click", () => {
+            const index = Number.parseInt(button.dataset.pathIndex || "0", 10) || 0;
+            const nextParts = activePathParts.slice(0, index + 1);
+
+            const categoryName = nextParts[0] || "";
+            const categoryChip = Array.from(document.querySelectorAll(".category-chip"))
+              .find(chip => (chip.dataset.target || "") === categoryName);
+            if (categoryChip) categoryChip.click();
+            setActivePath(nextParts);
+
+            const key = button.dataset.pathKey || makePathKey(nextParts);
+            if (index > 0) {
+              openPathKey(key);
+            } else {
+              const category = categoryBlocks.find(block => (block.dataset.categoryName || "") === categoryName);
+              if (category) {
+                const categoryHeader = category.querySelector(".category-header");
+                const categoryContent = category.querySelector(".category-content");
+                if (categoryContent) categoryContent.style.display = "block";
+                if (categoryHeader) categoryHeader.classList.remove("collapsed");
+              }
+            }
+          });
+        });
+      }
+
+      function applyTreeFocus() {
+        const activeCategoryName = activePathParts[0] || "";
+        const activeKey = makePathKey(activePathParts);
+
+        function getParentPathKey(pathKey) {
+          const parts = String(pathKey || "")
+            .split("||")
+            .map(value => value.trim())
+            .filter(Boolean);
+          if (parts.length <= 1) return "";
+          return parts.slice(0, -1).join("||");
+        }
+
+        categoryBlocks.forEach(block => {
+          const content = block.querySelector(".category-content");
+          const tree = content ? content.querySelector(".taxonomy-tree") : null;
+          if (!tree) return;
+
+          const isActiveCategory = (block.dataset.categoryName || "") === activeCategoryName;
+          // Keep top-level category headers visible for consistent hierarchy.
+          block.classList.remove("is-focused-path");
+
+          tree.querySelectorAll(".is-hidden-by-focus").forEach(element => element.classList.remove("is-hidden-by-focus"));
+          tree.querySelectorAll(".is-context").forEach(element => element.classList.remove("is-context"));
+          tree.querySelectorAll(".is-focus-node").forEach(element => element.classList.remove("is-focus-node"));
+          tree.querySelectorAll(".is-active-leaf").forEach(element => element.classList.remove("is-active-leaf"));
+
+          if (!isActiveCategory || !activeKey) {
+            return;
+          }
+
+          const keyedElements = Array.from(tree.querySelectorAll("[data-path-key]"));
+          const activeElement = keyedElements.find(element => (element.dataset.pathKey || "") === activeKey) || null;
+          const activeIsLeaf = Boolean(activeElement && activeElement.classList.contains("tree-leaf"));
+
+          keyedElements.forEach(element => {
+            const key = element.dataset.pathKey || "";
+            if (!key) return;
+
+            const isSelf = key === activeKey;
+            const isOnActiveBranch = Boolean(activeKey) && (isSelf || activeKey.startsWith(`${key}||`));
+
+            // Keep all nodes visible; only guide expansion for the active path.
+            element.classList.remove("is-hidden-by-focus");
+            if (element.classList.contains("tree-node")) {
+              element.classList.remove("is-context", "is-focus-node");
+            }
+            if (element.classList.contains("tree-leaf")) {
+              element.classList.toggle("is-active-leaf", activeIsLeaf && isSelf);
+            }
+
+            if (element.tagName === "DETAILS") {
+              element.open = isOnActiveBranch;
+            }
+          });
+        });
+      }
+
+      function setActivePath(parts) {
+        activePathParts = parts.filter(Boolean);
+        applyTreeFocus();
+        renderPathBar();
+      }
+
+      renderPathBar();
+      document.addEventListener("category-filter-applied", event => {
+        const category = String(event?.detail?.category || "").trim();
+        if (!category) {
+          setActivePath([]);
+          return;
+        }
+        setActivePath([category]);
+      });
+
+      categoryBlocks.forEach(categoryBlock => {
+        const content = categoryBlock.querySelector(".category-content");
+        if (!content) return;
+
+        const subcategories = Array.from(content.querySelectorAll(":scope > .subcategory"));
+        if (subcategories.length === 0) return;
+
+        const treeRoot = document.createElement("div");
+        treeRoot.className = "taxonomy-tree";
+        const nodeCache = new Map();
+        const categoryName = (categoryBlock.dataset.categoryName || "").trim();
+
+        function getOrCreateNode(parentContainer, nodeKey, labelText, depthLevel) {
+          let node = nodeCache.get(nodeKey);
+          if (node) return node;
+
+          node = document.createElement("details");
+          node.className = "tree-node";
+          node.dataset.depth = String(depthLevel);
+
+          const summary = document.createElement("summary");
+          summary.className = "tree-node-summary";
+          summary.innerHTML = `
+            <span class="tree-node-label">${escapeHtml(labelText)}</span>
+            <span class="tree-node-count">0</span>
+          `;
+
+          const children = document.createElement("div");
+          children.className = "tree-node-children";
+
+          node.appendChild(summary);
+          node.appendChild(children);
+          parentContainer.appendChild(node);
+          nodeCache.set(nodeKey, node);
+
+          summary.addEventListener("click", event => {
+            // Keep focused path nodes open; native <details> toggle can close
+            // them after we apply focus classes, which causes blank trees.
+            event.preventDefault();
+            const raw = node.dataset.pathParts || "[]";
+            let pathParts = [];
+            try {
+              pathParts = JSON.parse(raw);
+            } catch {
+              pathParts = [categoryName, labelText];
+            }
+            const nodeKey = makePathKey(pathParts);
+            const activeCurrentKey = makePathKey(activePathParts);
+
+            // Toggle behavior: clicking the same open parent node collapses it.
+            if (node.open && nodeKey === activeCurrentKey) {
+              node.open = false;
+              setActivePath(pathParts.slice(0, -1));
+              return;
+            }
+
+            node.open = true;
+            closeSiblingDetails(node);
+            setActivePath(pathParts);
+          });
+
+          node.addEventListener("toggle", () => {
+            if (node.open) {
+              closeSiblingDetails(node);
+            }
+          });
+
+          return node;
+        }
+
+        subcategories.forEach((subcategory, index) => {
+          const machineName = (subcategory.dataset.machineName || "Unknown Machine").trim();
+          const hierarchyPath = parseHierarchyPathFromData(subcategory.dataset.hierarchyPath);
+          const clusterName = (subcategory.dataset.clusterName || `Topic ${index + 1}`).trim();
+          const branchParts = [machineName, ...hierarchyPath];
+
+          const title = subcategory.querySelector(".subcategory-title");
+          const stalePill = title ? title.querySelector(".stale-pill") : null;
+          if (title) {
+            title.textContent = clusterName;
+            if (stalePill) {
+              title.appendChild(stalePill);
+            }
+          }
+
+          let parent = treeRoot;
+          let keyPrefix = (categoryBlock.dataset.categoryName || "type").toLowerCase();
+          let terminalNode = null;
+          const branchSoFar = [];
+          branchParts.forEach((part, depth) => {
+            keyPrefix = `${keyPrefix}>${part.toLowerCase()}`;
+            const node = getOrCreateNode(parent, keyPrefix, part, depth);
+            const countElement = node.querySelector(".tree-node-count");
+            const nextCount = (Number.parseInt(countElement?.textContent || "0", 10) || 0) + 1;
+            if (countElement) countElement.textContent = String(nextCount);
+            branchSoFar.push(part);
+            if (!node.dataset.pathParts) {
+              node.dataset.pathParts = JSON.stringify([categoryName, ...branchSoFar]);
+            }
+            if (!node.dataset.pathKey) {
+              node.dataset.pathKey = makePathKey([categoryName, ...branchSoFar]);
+            }
+            terminalNode = node;
+            parent = node.querySelector(".tree-node-children");
+          });
+
+          const normalizedClusterName = clusterName.toLowerCase();
+          const lastBranchLabel = branchParts.length > 0
+            ? String(branchParts[branchParts.length - 1] || "").trim().toLowerCase()
+            : "";
+          const shouldInlineLeaf = Boolean(lastBranchLabel) && lastBranchLabel === normalizedClusterName;
+
+          if (shouldInlineLeaf && terminalNode) {
+            const inlineBody = document.createElement("div");
+            inlineBody.className = "tree-node-inline";
+
+            const inlineHeader = subcategory.querySelector(".subcategory-header");
+            const inlineContent = subcategory.querySelector(".subcategory-content");
+            if (inlineContent) inlineContent.style.display = "block";
+            if (inlineHeader) inlineHeader.classList.remove("collapsed");
+
+            inlineBody.appendChild(subcategory);
+            parent.appendChild(inlineBody);
+            const terminalPath = [categoryName, ...branchParts];
+            terminalNode.dataset.pathParts = JSON.stringify(terminalPath);
+            terminalNode.dataset.pathKey = makePathKey(terminalPath);
+            return;
+          }
+
+          const leaf = document.createElement("details");
+          leaf.className = "tree-leaf";
+          const leafPath = [categoryName, ...branchParts];
+          if (!leafPath[leafPath.length - 1] || leafPath[leafPath.length - 1].toLowerCase() !== clusterName.toLowerCase()) {
+            leafPath.push(clusterName);
+          }
+          leaf.dataset.pathParts = JSON.stringify(leafPath);
+          leaf.dataset.pathKey = makePathKey(leafPath);
+
+          const leafSummary = document.createElement("summary");
+          leafSummary.className = "tree-leaf-summary";
+          leafSummary.innerHTML = `<span class="tree-leaf-label">${escapeHtml(clusterName)}</span>`;
+          leafSummary.addEventListener("click", event => {
+            event.preventDefault();
+            const leafKey = makePathKey(leafPath);
+            const activeKey = makePathKey(activePathParts);
+
+            // Toggle behavior: clicking the same open leaf collapses back to parent level.
+            if (leaf.open && activeKey === leafKey) {
+              leaf.open = false;
+              setActivePath(leafPath.slice(0, -1));
+              return;
+            }
+
+            leaf.open = true;
+            closeSiblingDetails(leaf);
+            ensureSubcategoryVisible(leaf);
+            setActivePath(leafPath);
+          });
+          leaf.appendChild(leafSummary);
+
+          const leafBody = document.createElement("div");
+          leafBody.className = "tree-leaf-body";
+          leafBody.appendChild(subcategory);
+          leaf.appendChild(leafBody);
+          leaf.addEventListener("toggle", () => {
+            if (leaf.open) {
+              closeSiblingDetails(leaf);
+              ensureSubcategoryVisible(leaf);
+            }
+          });
+          parent.appendChild(leaf);
+        });
+
+        content.innerHTML = "";
+        content.appendChild(treeRoot);
+
+        const categoryHeader = categoryBlock.querySelector(".category-header");
+        if (categoryHeader) {
+          categoryHeader.addEventListener("click", () => {
+            setActivePath([categoryName]);
+          });
+        }
+      });
+    }
+
+    function setupCategoryBrowser() {
+      const searchInput = document.getElementById("typeSearchInput");
+      const categoryBlocks = Array.from(document.querySelectorAll(".category[data-category-name]"));
+      if (categoryBlocks.length === 0) return;
+
+      let activeCategory = "";
+
+      function setCategoryExpanded(block, expanded) {
+        const header = block.querySelector(".category-header");
+        const content = block.querySelector(".category-content");
+        if (content) content.style.display = expanded ? "block" : "none";
+        if (header) header.classList.toggle("collapsed", !expanded);
+      }
+
+      function setActiveCategory(categoryName) {
+        if (!categoryName) return;
+        activeCategory = categoryName;
+        categoryBlocks.forEach(block => {
+          block.classList.toggle("is-tree-active-category", (block.dataset.categoryName || "") === categoryName);
+        });
+        document.dispatchEvent(
+          new CustomEvent("category-filter-applied", { detail: { category: categoryName } })
+        );
+      }
+
+      function getNodeLabel(node) {
+        const nodeLabel = node.querySelector(":scope > summary .tree-node-label");
+        const leafLabel = node.querySelector(":scope > summary .tree-leaf-label");
+        return (nodeLabel?.textContent || leafLabel?.textContent || "").trim();
+      }
+
+      function getDirectChildDetails(node) {
+        const container = node.querySelector(":scope > .tree-node-children");
+        if (!container) return [];
+        return Array.from(container.children).filter(element => element.matches("details.tree-node, details.tree-leaf"));
+      }
+
+      function filterTreeInCategory(block, query) {
+        const tree = block.querySelector(".taxonomy-tree");
+        if (!tree) return false;
+
+        const allDetails = Array.from(tree.querySelectorAll("details.tree-node, details.tree-leaf"));
+        allDetails.forEach(detail => detail.classList.remove("is-search-hidden", "is-search-match"));
+
+        if (!query) {
+          allDetails.forEach(detail => {
+            if (detail.classList.contains("tree-leaf")) {
+              detail.open = false;
+            }
+          });
+          return true;
+        }
+
+        function evaluate(detail) {
+          const label = normalizeForSearch(getNodeLabel(detail));
+          const children = getDirectChildDetails(detail);
+          let childMatch = false;
+
+          children.forEach(child => {
+            if (evaluate(child)) {
+              childMatch = true;
+            }
+          });
+
+          const selfMatch = label.includes(query);
+          const isMatch = selfMatch || childMatch;
+
+          detail.classList.toggle("is-search-hidden", !isMatch);
+          detail.classList.toggle("is-search-match", selfMatch);
+          detail.open = childMatch || (selfMatch && detail.classList.contains("tree-leaf"));
+          return isMatch;
+        }
+
+        const topLevelDetails = Array.from(tree.children)
+          .filter(element => element.matches("details.tree-node, details.tree-leaf"));
+
+        let hasAnyMatch = false;
+        topLevelDetails.forEach(detail => {
+          if (evaluate(detail)) {
+            hasAnyMatch = true;
+          }
+        });
+        return hasAnyMatch;
+      }
+
+      function applySearchFilter() {
+        const query = normalizeForSearch(searchInput?.value || "");
+        document.body.classList.toggle("is-tree-searching", Boolean(query));
+
+        const visibleBlocks = [];
+        categoryBlocks.forEach(block => {
+          const categoryName = (block.dataset.categoryName || "").trim();
+          const categoryMatch = normalizeForSearch(categoryName).includes(query);
+          let treeMatch = filterTreeInCategory(block, query);
+          if (query && categoryMatch && !treeMatch) {
+            filterTreeInCategory(block, "");
+            treeMatch = true;
+          }
+          const visible = !query || categoryMatch || treeMatch;
+
+          block.style.display = visible ? "" : "none";
+          if (!visible) return;
+          visibleBlocks.push(block);
+
+          if (query) {
+            setCategoryExpanded(block, true);
+          }
+        });
+
+        if (visibleBlocks.length === 0) {
+          return;
+        }
+
+        if (activeCategory) {
+          const activeStillVisible = visibleBlocks.some(
+            block => (block.dataset.categoryName || "") === activeCategory
+          );
+          if (!activeStillVisible) {
+            setActiveCategory(visibleBlocks[0].dataset.categoryName || "");
+          }
+        }
+
+        if (!query) {
+          visibleBlocks.forEach(block => {
+            const isActive = (block.dataset.categoryName || "") === activeCategory;
+            setCategoryExpanded(block, isActive);
+          });
+        }
+      }
+
+      categoryBlocks.forEach(block => {
+        const header = block.querySelector(".category-header");
+        if (!header) return;
+
+        header.addEventListener("click", () => {
+          const query = normalizeForSearch(searchInput?.value || "");
+          const categoryName = (block.dataset.categoryName || "").trim();
+          if (!categoryName) return;
+
+          const content = block.querySelector(".category-content");
+          const isExpanded = content ? content.style.display !== "none" : false;
+          const isSameCategory = activeCategory === categoryName;
+
+          if (!query && isSameCategory && isExpanded) {
+            setCategoryExpanded(block, false);
+            activeCategory = "";
+            categoryBlocks.forEach(other => other.classList.remove("is-tree-active-category"));
+            document.dispatchEvent(
+              new CustomEvent("category-filter-applied", { detail: { category: "" } })
+            );
+            return;
+          }
+
+          setActiveCategory(categoryName);
+
+          if (!query) {
+            categoryBlocks.forEach(other => {
+              if (other !== block) {
+                setCategoryExpanded(other, false);
+              }
+            });
+            setCategoryExpanded(block, true);
+          }
         });
       });
 
-      const firstCategory = chips[0]?.dataset.target || "";
-      if (firstCategory) {
-        applyFilter(firstCategory);
+      if (searchInput) {
+        searchInput.addEventListener("input", applySearchFilter);
+      }
+
+      applySearchFilter();
+    }
+
+    function setupHeaderActionGuards() {
+      document.querySelectorAll(".no-collapse").forEach(element => {
+        element.addEventListener("click", event => {
+          event.stopPropagation();
+        });
+      });
+    }
+
+    function setupActionMenus() {
+      const menus = Array.from(document.querySelectorAll(".action-menu"));
+      if (menus.length === 0) return;
+
+      menus.forEach(menu => {
+        menu.addEventListener("toggle", () => {
+          if (!menu.open) return;
+          menus.forEach(other => {
+            if (other !== menu) other.open = false;
+          });
+        });
+      });
+
+      document.addEventListener("click", event => {
+        if (event.target.closest(".action-menu")) return;
+        menus.forEach(menu => {
+          menu.open = false;
+        });
+      });
+
+      document.addEventListener("keydown", event => {
+        if (event.key !== "Escape") return;
+        menus.forEach(menu => {
+          menu.open = false;
+        });
+      });
+    }
+
+    function setupDestructiveVerification() {
+      document.querySelectorAll("form.confirm-destructive-form").forEach(form => {
+        const hiddenConfirm = form.querySelector('input[name="confirm_delete"]');
+        const message = form.dataset.confirmMessage || "Are you sure you want to delete this item and related data?";
+
+        form.addEventListener("submit", event => {
+          if (hiddenConfirm) hiddenConfirm.value = "no";
+          const confirmed = window.confirm(message);
+          if (!confirmed) {
+            event.preventDefault();
+            return;
+          }
+          if (hiddenConfirm) hiddenConfirm.value = "yes";
+        });
+      });
+    }
+
+    function parseStaleFiles(rawValue) {
+      return String(rawValue || "")
+        .split("||")
+        .map(value => value.trim())
+        .filter(Boolean);
+    }
+
+    function buildDeletedTooltip(scopeLabel, deletedFiles, count) {
+      if (count <= 0) {
+        return `No deleted files are tracked for this ${scopeLabel.toLowerCase()}.`;
+      }
+
+      const preview = deletedFiles.slice(0, 6).map(file => `- ${file}`).join("\n");
+      const moreLine = count > deletedFiles.length ? `\n...and ${count - deletedFiles.length} more` : "";
+      return `These files are deleted but still part of this ${scopeLabel.toLowerCase()}:\n${preview}${moreLine}`;
+    }
+
+    function applyRedoButtonState(button, count, tooltip) {
+      if (!button) return;
+      const normalizedCount = Number.isFinite(count) ? count : 0;
+      const baseLabel = button.dataset.baseLabel || button.textContent.trim() || "Redo";
+
+      button.classList.remove("redo-ok", "redo-warn", "redo-alert", "has-tooltip");
+      if (normalizedCount <= 0) {
+        button.classList.add("redo-ok");
+      } else if (normalizedCount === 1) {
+        button.classList.add("redo-warn");
+      } else {
+        button.classList.add("redo-alert");
+      }
+
+      button.textContent = normalizedCount > 0 ? `${baseLabel} (+${normalizedCount})` : baseLabel;
+      if (tooltip) {
+        button.classList.add("has-tooltip");
+        button.dataset.tooltip = tooltip;
+        button.title = tooltip;
+      } else {
+        button.removeAttribute("data-tooltip");
+        button.removeAttribute("title");
       }
     }
 
-    bindCollapsible(".category-header", "category-content");
+    function setupStaleCategoryBadges() {
+      const categories = Array.from(document.querySelectorAll(".category[data-category-name]"));
+
+      document.querySelectorAll(".redo-cluster-btn").forEach(button => {
+        const staleCount = Number.parseInt(button.dataset.staleCount || "0", 10) || 0;
+        const staleFiles = parseStaleFiles(button.dataset.staleFiles);
+        const tooltip = buildDeletedTooltip("Undercategory", staleFiles, staleCount);
+        applyRedoButtonState(button, staleCount, tooltip);
+      });
+
+      categories.forEach(category => {
+        const staleBadges = Array.from(category.querySelectorAll(".stale-pill[data-stale-count]"));
+        const staleTotal = staleBadges.reduce((sum, badge) => {
+          const count = Number.parseInt(badge.dataset.staleCount || "0", 10);
+          return sum + (Number.isNaN(count) ? 0 : count);
+        }, 0);
+
+        const categoryClusterButtons = Array.from(category.querySelectorAll(".redo-cluster-btn"));
+        const staleFileSet = new Set();
+        categoryClusterButtons.forEach(button => {
+          parseStaleFiles(button.dataset.staleFiles).forEach(file => staleFileSet.add(file));
+        });
+        const staleFiles = Array.from(staleFileSet);
+        const categoryTooltip = buildDeletedTooltip("Category", staleFiles, staleTotal);
+
+        const categoryRedoButton = category.querySelector(".redo-category-btn");
+        applyRedoButtonState(categoryRedoButton, staleTotal, categoryTooltip);
+
+        if (staleTotal <= 0) return;
+
+        const labelText = `+${staleTotal}`;
+        const categoryName = category.dataset.categoryName || "";
+        const escapedCategoryName = window.CSS?.escape
+          ? CSS.escape(categoryName)
+          : categoryName.replaceAll('"', '\\"');
+        const chip = document.querySelector(`.category-chip[data-target="${escapedCategoryName}"]`);
+        if (chip && !chip.querySelector(".category-stale-count")) {
+          const stale = document.createElement("span");
+          stale.className = "category-stale-count";
+          stale.textContent = labelText;
+          stale.title = categoryTooltip;
+          chip.appendChild(stale);
+        }
+
+        const title = category.querySelector(".category-title");
+        if (title && !title.querySelector(".category-stale-inline")) {
+          const inline = document.createElement("span");
+          inline.className = "category-stale-inline";
+          inline.textContent = labelText;
+          inline.title = categoryTooltip;
+          title.appendChild(inline);
+        }
+      });
+    }
+
+    setupHierarchyTree();
     bindCollapsible(".subcategory-header", "subcategory-content");
 
     document.querySelectorAll(".snippet-item").forEach(element => {
@@ -1020,14 +2525,14 @@
         const category = element.dataset.category;
         const file = element.dataset.file;
         const snippet = element.dataset.snippet || "";
+        const snippetSegmentId = parseMaybeInt(element.dataset.segmentId);
         const snippetStart = parseMaybeFloat(element.dataset.start);
-        const snippetEnd = parseMaybeFloat(element.dataset.end);
 
         const entry = findEntry(category, file);
         const segments = entry?.transcription?.segments || [];
-        const activeIndex = findBestSegmentIndex(segments, snippet, snippetStart);
+        const activeIndex = findBestSegmentIndex(segments, snippet, snippetStart, snippetSegmentId);
 
-        updateAbout(entry, file, snippetStart, snippetEnd);
+        updateAbout(entry, file);
         renderTranscript(entry, activeIndex, snippet);
 
         try {
@@ -1065,10 +2570,18 @@
     });
 
     setupUploadModal();
+    setupDismissibleNotices();
     setupLibraryPanel();
     setupPaneResizer();
     setupSummaryPaneToggles();
     setupCategoryBrowser();
+    applySavedTaxonomyColors();
+    setupTaxonomyInputs();
+    setupHeaderActionGuards();
+    setupActionMenus();
+    setupDestructiveVerification();
+    setupStaleCategoryBadges();
+    formatSnippetTimeBadges();
   </script>
 </body>
 </html>

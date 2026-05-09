@@ -76,6 +76,8 @@ class KnowledgeModelClient:
         self,
         texts: list[str],
         existing_summary: str = "",
+        context: dict | None = None,
+        mode: str = "full",
     ) -> dict:
         if not texts:
             return {
@@ -83,10 +85,48 @@ class KnowledgeModelClient:
                 "summary": existing_summary,
             }
 
+        normalized_mode = str(mode or "full").strip().lower()
+        if normalized_mode not in {"full", "incremental"}:
+            normalized_mode = "full"
+
+        if normalized_mode == "incremental":
+            mode_rules = (
+                "- Update the existing summary with ONLY new facts explicitly present in NEW snippets.\n"
+                "- Keep stable parts of the existing summary when NEW snippets do not change them.\n"
+                "- Do not add external knowledge, assumptions, or inferred steps.\n"
+                "- If NEW snippets are mostly intro/outro/engagement language, say that no meaningful update exists.\n"
+                "- Include 1 to 4 sections depending on evidence density.\n"
+                "- Each section body should be 1 to 3 sentences.\n"
+                "- Keep summary concise (50 to 160 words).\n"
+            )
+            user_instruction = (
+                f"Taxonomy context: {self._format_taxonomy_context(context)}\n"
+                f"Existing summary baseline:\n{existing_summary or 'None'}\n\n"
+                "Use existing summary only as baseline text. NEW snippets are the only new evidence.\n\n"
+                "NEW snippets:\n"
+                + "\n---\n".join(texts)
+            )
+        else:
+            mode_rules = (
+                "- Use ONLY facts explicitly present in the snippets.\n"
+                "- Do not infer missing steps, tools, root causes, safety advice, or outcomes.\n"
+                "- If snippets are mostly intro/outro or engagement talk, say that plainly.\n"
+                "- Include 1 to 5 sections depending on available evidence.\n"
+                "- Each section body should be 1 to 4 sentences.\n"
+                "- Keep summary concise (50 to 180 words based on evidence density).\n"
+            )
+            user_instruction = (
+                f"Taxonomy context: {self._format_taxonomy_context(context)}\n"
+                "Do not use external knowledge or prior summaries.\n"
+                "Only summarize what is explicitly stated below.\n\n"
+                "New snippets:\n"
+                + "\n---\n".join(texts)
+            )
+
         response = self.client.chat.completions.create(
             model=self.chat_model,
             temperature=0.2,
-            max_tokens=1100,
+            max_tokens=900,
             messages=[
                 {
                     "role": "system",
@@ -100,23 +140,14 @@ class KnowledgeModelClient:
                         "\"summary\": \"a detailed long-form summary\""
                         "}.\n"
                         "Rules:\n"
-                        "- Keep language concrete and faithful to source text.\n"
-                        "- Include 5 to 7 sections.\n"
-                        "- Each section body should be 4 to 7 sentences.\n"
-                        "- The summary field should be 180 to 260 words.\n"
-                        "- Explain sequence, intent, and common failure points.\n"
+                        + mode_rules +
                         "- Use complete sentences and avoid bullet-list formatting.\n"
                         "- Never output markdown fences."
                     ),
                 },
                 {
                     "role": "user",
-                    "content": (
-                        f"Existing summary: {existing_summary or 'None'}\n"
-                        "Preserve useful details from the existing summary when still relevant.\n\n"
-                        "New snippets:\n"
-                        + "\n---\n".join(texts)
-                    ),
+                    "content": user_instruction,
                 },
             ],
         )
@@ -163,7 +194,7 @@ class KnowledgeModelClient:
             raise ValueError("No JSON object found in model response.")
         return json.loads(match.group(0))
 
-    def name_category(self, texts: list[str], existing_names: list[str]) -> str:
+    def name_category(self, texts: list[str], existing_names: list[str], context: dict | None = None) -> str:
         if not texts:
             return "Empty"
 
@@ -184,9 +215,49 @@ class KnowledgeModelClient:
                 },
                 {
                     "role": "user",
-                    "content": "\n---\n".join(texts),
+                    "content": (
+                        f"Taxonomy context: {self._format_taxonomy_context(context)}\n\n"
+                        + "\n---\n".join(texts)
+                    ),
                 },
             ],
         )
 
         return response.choices[0].message.content.strip()
+
+    def _format_taxonomy_context(self, context: dict | None) -> str:
+        """Serialize upload taxonomy metadata for prompt context."""
+        if not context:
+            return "None"
+
+        machine_type = str(context.get("machine_type") or "").strip() or "Unassigned"
+        machine_name = str(context.get("machine_name") or "").strip() or "Unknown Machine"
+        subcategory_paths = []
+        for raw_path in (context.get("subcategory_paths") or []):
+            if isinstance(raw_path, str):
+                parts = [part.strip() for part in raw_path.split(">")]
+            elif isinstance(raw_path, (list, tuple)):
+                parts = [str(value).strip() for value in raw_path]
+            else:
+                continue
+            path = [part for part in parts if part]
+            if path:
+                subcategory_paths.append(path)
+
+        hierarchy_raw = context.get("hierarchy_path") or []
+        hierarchy_path = [str(value).strip() for value in hierarchy_raw if str(value).strip()]
+
+        tags_raw = context.get("extra_tags") or []
+        tags = [str(value).strip() for value in tags_raw if str(value).strip()]
+
+        parts = [
+            f"type={machine_type}",
+            f"machine={machine_name}",
+        ]
+        if subcategory_paths:
+            parts.append("subcategory_paths=" + "; ".join(" > ".join(path) for path in subcategory_paths[:8]))
+        if hierarchy_path:
+            parts.append("hierarchy=" + " > ".join(hierarchy_path))
+        if tags:
+            parts.append("tags=" + ", ".join(tags))
+        return " | ".join(parts)

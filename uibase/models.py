@@ -5,6 +5,13 @@ from django.utils import timezone
 class AudioUpload(models.Model):
     stored_name = models.CharField(max_length=255, unique=True)
     original_name = models.CharField(max_length=255, blank=True)
+    machine_name = models.CharField(max_length=255, db_index=True, blank=True)
+    machine_type = models.CharField(max_length=255, db_index=True, default="Unassigned")
+    # Each item is one optional taxonomy path, e.g.
+    # [["Brakes", "Brake pads"], ["Wheels", "Torque"]]
+    subcategory_paths = models.JSONField(default=list, blank=True)
+    hierarchy_path = models.JSONField(default=list, blank=True)
+    extra_tags = models.JSONField(default=list, blank=True)
     category = models.CharField(max_length=255, db_index=True)
     author = models.CharField(max_length=255, blank=True)
     recorded_on = models.DateField(default=timezone.localdate)
@@ -53,6 +60,9 @@ class CategoryCluster(models.Model):
     summary_sections = models.JSONField(default=list, blank=True)
     embedding = models.JSONField(default=list, blank=True)
     member_count = models.PositiveIntegerField(default=0)
+    needs_resummary = models.BooleanField(default=False)
+    stale_deleted_count = models.PositiveIntegerField(default=0)
+    stale_deleted_files = models.JSONField(default=list, blank=True)
     position = models.PositiveIntegerField(default=0)
     created_at = models.DateTimeField(auto_now_add=True)
 
@@ -87,3 +97,27 @@ class ClusterSegment(models.Model):
 
     def __str__(self) -> str:
         return f"{self.cluster} -> {self.segment}"
+
+
+class MachineTypeStyle(models.Model):
+    machine_type = models.CharField(max_length=255, unique=True)
+    color_hex = models.CharField(max_length=7, default="#3A78F2")
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["machine_type"]
+
+    def __str__(self) -> str:
+        return f"{self.machine_type}: {self.color_hex}"
+
+
+class MachineStyle(models.Model):
+    machine_name = models.CharField(max_length=255, unique=True)
+    color_hex = models.CharField(max_length=7, default="#3A78F2")
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["machine_name"]
+
+    def __str__(self) -> str:
+        return f"{self.machine_name}: {self.color_hex}"

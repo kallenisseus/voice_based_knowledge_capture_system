@@ -55,6 +55,57 @@ def _parse_recorded_on(value: str | None) -> date:
         return timezone.localdate()
 
 
+def _normalize_string_list(values) -> list[str]:
+    """Normalize optional list-like taxonomy fields from legacy payloads."""
+    if not values:
+        return []
+    if isinstance(values, str):
+        values = [value.strip() for value in values.replace(";", ",").split(",")]
+
+    cleaned = []
+    seen = set()
+    for value in values:
+        item = str(value or "").strip()
+        if not item:
+            continue
+        key = item.casefold()
+        if key in seen:
+            continue
+        seen.add(key)
+        cleaned.append(item)
+    return cleaned
+
+
+def _normalize_subcategory_paths(values) -> list[list[str]]:
+    """Normalize legacy subcategory path data into list-of-lists."""
+    if not values:
+        return []
+    if isinstance(values, str):
+        values = [values]
+
+    normalized = []
+    seen = set()
+    for raw_path in values:
+        if isinstance(raw_path, str):
+            parts = [part.strip() for part in raw_path.split(">")]
+        elif isinstance(raw_path, (list, tuple)):
+            parts = [str(value or "").strip() for value in raw_path]
+        else:
+            continue
+
+        path = [part for part in parts if part]
+        if not path:
+            continue
+
+        key = tuple(part.casefold() for part in path)
+        if key in seen:
+            continue
+        seen.add(key)
+        normalized.append(path)
+
+    return normalized
+
+
 class Command(BaseCommand):
     help = "Imports legacy JSON metadata/transcripts into SQLite and rebuilds clusters."
 
@@ -109,6 +160,11 @@ class Command(BaseCommand):
                     audio_file=file_name,
                     original_name=item.get("audio_file") or file_name,
                     author=(item.get("author") or "").strip(),
+                    machine_name=(item.get("machine_name") or category).strip(),
+                    machine_type=(item.get("machine_type") or "Unassigned").strip() or "Unassigned",
+                    subcategory_paths=_normalize_subcategory_paths(item.get("subcategory_paths")),
+                    hierarchy_path=_normalize_string_list(item.get("hierarchy_path")),
+                    extra_tags=_normalize_string_list(item.get("extra_tags")),
                     category=category,
                     recorded_on=_parse_recorded_on(item.get("date")),
                 )

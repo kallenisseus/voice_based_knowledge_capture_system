@@ -33,7 +33,12 @@ VoiceBased is a Django app that ingests audio files, transcribes them, clusters 
 ## Data Model (SQLite)
 
 - `AudioUpload`
-  One row per uploaded file.
+  One row per uploaded file, including taxonomy metadata:
+  - `machine_name` (required for new uploads)
+  - `machine_type` (defaults to `Unassigned` if not supplied)
+  - `subcategory_paths` (optional legacy/list field kept for compatibility)
+  - `hierarchy_path` (optional legacy/list field kept for compatibility)
+  - `extra_tags` (optional list of tags)
 - `TranscriptSegment`
   Timestamped transcript chunks linked to one upload.
 - `CategoryCluster`
@@ -46,30 +51,53 @@ VoiceBased is a Django app that ingests audio files, transcribes them, clusters 
 - Per-segment embeddings are generated at processing time but are not persisted in SQLite.
 - Each new segment embedding is compared against each existing cluster centroid embedding.
 - If similarity is high enough, the segment is assigned to that cluster; otherwise, unmatched segments go through a second clustering pass and may end up in `Uncategorized`.
+- Low-signal promo/intro/outro snippets are routed to `Uncategorized` instead of creating technical clusters.
 - After assignment, the cluster centroid embedding is updated with a weighted merge so future uploads can be matched efficiently.
 
 ## AI Processing Build (Step by Step)
 
-1. Upload arrives in `uibase/views.py` (`dashboard` POST flow).
-2. `ai/pipeline.py::process_uploaded_file` creates/updates the upload row.
-3. `ai/transcription.py` generates transcript text + timestamped segments.
+1. Upload arrives in `uibase/views.py` (`dashboard` POST flow) with machine + type + optional tags.
+2. `ai/pipeline.py::process_uploaded_file` creates/updates the upload row and keeps one clustering bucket per machine (`category` key).
+3. `ai/transcription.py` generates transcript text + timestamped segments using machine/type/tag context.
 4. Segments are stored in SQLite (`TranscriptSegment`), but without persisted per-segment vectors.
 5. `ai/language_models.py` generates fresh embeddings for the new segment texts in-memory.
 6. `ai/pipeline.py::assign_new_segments_to_clusters` compares each new segment vector to existing cluster centroid vectors.
-7. Matched segments are appended to existing clusters; unmatched segments are grouped into new topic clusters or `Uncategorized`.
-8. For touched clusters, summaries are regenerated and centroid vectors are updated and persisted.
+7. Matched segments are appended to existing clusters; unmatched segments are grouped into new topic clusters or `Uncategorized` (promo/noise text is forced to `Uncategorized`).
+8. For touched clusters, default summarization is incremental (existing summary + newly added snippet evidence), while manual "Redo Summary" performs a full reorganization from current cluster snippets.
 9. UI payload is rebuilt through `ai/repository.py::load_dashboard_data`.
+
+## Taxonomy + Search Tree UX
+
+- Upload modal is now tags-first: users enter `type`, `machine`, optional `extra_tags`, and author.
+- The left navigation renders as an expandable tree:
+  - `Type -> Machine -> Subcategory path -> AI cluster`.
+- Each node is pressable/expandable so users can drill down quickly even with many assets.
+
+## Upload Taxonomy Rules
+
+- Required:
+  - `machine_name`
+- Required in practice:
+  - `machine_type` (server fallback: `Unassigned`)
+- Optional:
+  - `extra_tags` (comma-separated; deduplicated)
+- Compatibility note:
+  - `subcategory_paths` and `hierarchy_path` are still stored/read when present in existing rows, but new uploads do not collect them in the UI.
+
+## Grounded Summary Rules
+
+- New evidence is always snippet text; prompts forbid adding facts not present in snippets.
+- Default ingestion mode is incremental: keep existing summary as baseline and update with new snippet evidence.
+- Manual "Redo Summary" / "Redo Category" runs full regeneration from current snippets.
+- If snippets are mostly intro/outro/promo language, they are treated as low-signal and routed to `Uncategorized`.
+- Local fallback summarization is extractive/grounded (no generic invented sections).
 
 ## Snippet-To-Transcript UX
 
 - Clicking a snippet in the left panel:
   - Opens parent category/subcategory if needed.
   - Loads and seeks audio.
-  - Renders a focused transcript window on the right side.
-- Transcript windowing is adaptive:
-  - shows `3-6` transcript rows based on viewport height,
-  - keeps the selected snippet near the top when possible,
-  - falls back near the end when fewer rows remain.
+  - Renders the full transcript on the right side and scrolls the local transcript container to the matching segment.
 - Panel scrolling is local to the right transcript container (not full-page jump).
 
 ## Configuration Notes
@@ -88,3 +116,18 @@ VoiceBased is a Django app that ingests audio files, transcribes them, clusters 
 - Legacy compatibility wrapper modules were removed to keep the codebase easier to scan.
 - Use the new modules directly (`pipeline.py`, `repository.py`, `transcription.py`, `language_models.py`).
 - When debugging behavior, begin in `ai/pipeline.py`, then follow the step-specific module it calls.
+
+## Agent Pack
+
+This repository also includes reusable specialist briefs for Codex sub-agents.
+
+- Guide:
+  - `docs/agents/README.md`
+- Specialists:
+  - `docs/agents/ai-agent.md`
+  - `docs/agents/ui-agent.md`
+  - `docs/agents/security-agent.md`
+  - `docs/agents/structure-agent.md`
+
+Use these when you want to delegate focused work without making every task a
+full-repo context dump.
